@@ -1,0 +1,125 @@
+services:
+  # Statechecker API Service
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Logging
+      PYTHONUNBUFFERED: "1"
+      TIMEZONE: ${TIMEZONE:-Europe/Berlin}
+      # API Authentication
+      SERVER_AUTHENTICATION_TOKEN: ${SERVER_AUTHENTICATION_TOKEN}
+      # Database connection
+      DB_HOST: db
+      DB_USER: ${DB_USER:-state_checker}
+      DB_PW: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-state_checker}
+      # Config
+      STATECHECKER_SERVER_CONFIG: ${STATECHECKER_SERVER_CONFIG:-}
+    volumes:
+      - ../src:/code/src:ro
+      - ../main_api_startpoint.py:/code/main_api_startpoint.py:ro
+      - ../logs:/code/logs
+    ports:
+      - "${REST_API_PORT:-8787}:${REST_API_PORT:-8787}"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${REST_API_PORT:-8787}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: ["uvicorn", "main_api_startpoint:app", "--host", "0.0.0.0", "--port", "${REST_API_PORT:-8787}", "--reload"]
+
+  # Statechecker Check Worker Service
+  check:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Logging
+      PYTHONUNBUFFERED: "1"
+      TIMEZONE: ${TIMEZONE:-Europe/Berlin}
+      # Check Frequency
+      CHECK_WEBSITES_EVERY_X_MINUTES: ${CHECK_WEBSITES_EVERY_X_MINUTES:-30}
+      CHECK_GOOGLEDRIVE_EVERY_X_MINUTES: ${CHECK_GOOGLEDRIVE_EVERY_X_MINUTES:-60}
+      # Database connection
+      DB_HOST: db
+      DB_USER: ${DB_USER:-state_checker}
+      DB_PW: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-state_checker}
+      # Config
+      STATECHECKER_SERVER_CONFIG: ${STATECHECKER_SERVER_CONFIG:-}
+      # Messaging
+      STATUS_MESSAGES_TIME_OFFSET_PERCENTAGE: ${STATUS_MESSAGES_TIME_OFFSET_PERCENTAGE:-2.5}
+      # Email
+      EMAIL_ENABLED: ${EMAIL_ENABLED:-false}
+      EMAIL_SENDER_USER: ${EMAIL_SENDER_USER:-}
+      EMAIL_SENDER_PASSWORD: ${EMAIL_SENDER_PASSWORD:-}
+      EMAIL_SENDER_HOST: ${EMAIL_SENDER_HOST:-}
+      EMAIL_SENDER_PORT: ${EMAIL_SENDER_PORT:-587}
+      EMAIL_RECIPIENTS_ERROR: ${EMAIL_RECIPIENTS_ERROR:-}
+      EMAIL_RECIPIENTS_INFORMATION: ${EMAIL_RECIPIENTS_INFORMATION:-}
+      # Telegram
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_STATUS_MESSAGES_EVERY_X_MINUTES: ${TELEGRAM_STATUS_MESSAGES_EVERY_X_MINUTES:-60}
+      TELEGRAM_SENDER_BOT_TOKEN: ${TELEGRAM_SENDER_BOT_TOKEN:-}
+      TELEGRAM_RECIPIENTS_ERROR_CHAT_IDS: ${TELEGRAM_RECIPIENTS_ERROR_CHAT_IDS:-}
+      TELEGRAM_RECIPIENTS_INFO_CHAT_IDS: ${TELEGRAM_RECIPIENTS_INFO_CHAT_IDS:-}
+    volumes:
+      - ../src:/code/src:ro
+      - ../logs:/code/logs
+    networks:
+      - backend
+    command: ["python", "src/check_tools.py"]
+
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:-state_checker}
+      MYSQL_USER: ${DB_USER:-state_checker}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password_change_me}
+    volumes:
+      - db_data:/var/lib/mysql
+      - ../install/database/state_checker.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # phpMyAdmin for database administration (optional)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PMA_HOST: db
+      PMA_PORT: 3306
+      PMA_USER: ${DB_USER:-state_checker}
+      PMA_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${PHPMYADMIN_PORT:-8080}:80"
+    networks:
+      - backend
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  db_data:
