@@ -51,6 +51,32 @@ function Show-Logs {
     docker compose --env-file .env -f $ComposeFile logs -f
 }
 
+function Invoke-DbReinstall {
+    param([string]$ComposeFile)
+
+    if ($ComposeFile -ne 'local-deployment\docker-compose.yml') {
+        Write-Host "[WARN] DB re-install is only supported for local-deployment/docker-compose.yml." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "[WARN] This will completely reset the database volume (db_data) for Statechecker." -ForegroundColor Yellow
+    Write-Host "       All existing data in that volume will be LOST." -ForegroundColor Yellow
+    Write-Host "" 
+    Write-Host "If you want to preserve your current data, create a backup first (e.g. via phpMyAdmin)." -ForegroundColor Yellow
+    Write-Host "Local phpMyAdmin (if enabled) is available at http://localhost:`$(`$env:PHPMYADMIN_PORT ?? '8080')" -ForegroundColor Yellow
+    Write-Host "" 
+    $confirm = Read-Host "Type 'yes' to continue"
+    if ($confirm -ne 'yes') {
+        Write-Host "Cancelled DB re-install." -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "" 
+    Write-Host "Recreating containers and database volume (docker compose down -v / up --build)..." -ForegroundColor Cyan
+    docker compose --env-file .env -f $ComposeFile down -v
+    docker compose --env-file .env -f $ComposeFile up --build
+}
+
 function Show-MainMenu {
     param([string]$ComposeFile)
 
@@ -63,9 +89,10 @@ function Show-MainMenu {
     Write-Host "3) View logs" -ForegroundColor Gray
     Write-Host "4) Docker Compose Down (stop containers)" -ForegroundColor Gray
     Write-Host "5) Build Production Docker Image" -ForegroundColor Gray
-    Write-Host "6) Exit" -ForegroundColor Gray
-    Write-Host ""
-    $choice = Read-Host "Your choice (1-6)"
+    Write-Host "6) DB Re-Install (reset database volume)" -ForegroundColor Gray
+    Write-Host "7) Exit" -ForegroundColor Gray
+    Write-Host "" 
+    $choice = Read-Host "Your choice (1-7)"
 
     switch ($choice) {
         "1" {
@@ -89,6 +116,10 @@ function Show-MainMenu {
             $summary = "Image build executed"
         }
         "6" {
+            Invoke-DbReinstall -ComposeFile $ComposeFile
+            $summary = "DB re-install executed"
+        }
+        "7" {
             Write-Host "Goodbye!" -ForegroundColor Cyan
             exit 0
         }

@@ -4,6 +4,32 @@
 #
 # Module for handling menu actions in quick-start script
 
+handle_db_reinstall() {
+    local compose_file="$1"
+
+    if [ "$compose_file" != "local-deployment/docker-compose.yml" ]; then
+        echo "⚠️  DB re-install is only supported for local-deployment/docker-compose.yml."
+        return
+    fi
+
+    echo "⚠️  This will completely reset the database volume (db_data) for Statechecker."
+    echo "    All existing data in that volume will be LOST."
+    echo ""
+    echo "If you want to preserve your current data, create a backup first (e.g. via phpMyAdmin)."
+    echo "Local phpMyAdmin (if enabled) is available at http://localhost:\${PHPMYADMIN_PORT:-8080}"
+    echo ""
+    read -p "Type 'yes' to continue: " confirm
+    if [ "$confirm" != "yes" ]; then
+        echo "Cancelled DB re-install."
+        return
+    fi
+
+    echo ""
+    echo "🧹 Recreating containers and database volume (docker compose down -v / up --build)..."
+    docker compose --env-file .env -f "$compose_file" down -v
+    docker compose --env-file .env -f "$compose_file" up --build
+}
+
 handle_stack_start() {
     local compose_file="$1"
     
@@ -38,7 +64,7 @@ handle_build_image() {
     echo "🏗️  Building production Docker image..."
     echo ""
     if [ -f "build-image/build-image.sh" ]; then
-        ./build-image/build-image.sh
+        bash build-image/build-image.sh
     else
         echo "❌ build-image/build-image.sh not found"
     fi
@@ -65,10 +91,11 @@ show_main_menu() {
         echo "3) View logs"
         echo "4) Docker Compose Down (stop containers)"
         echo "5) Build Production Docker Image"
-        echo "6) Exit"
+        echo "6) DB Re-Install (reset database volume)"
+        echo "7) Exit"
         echo ""
 
-        read -p "Your choice (1-6): " choice
+        read -p "Your choice (1-7): " choice
 
         case $choice in
           1)
@@ -97,6 +124,11 @@ show_main_menu() {
             break
             ;;
           6)
+            handle_db_reinstall "$compose_file"
+            summary_msg="DB re-install executed"
+            break
+            ;;
+          7)
             echo "👋 Goodbye!"
             exit 0
             ;;

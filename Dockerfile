@@ -73,3 +73,10 @@ ENV TELEGRAM_RECIPIENTS_INFO_CHAT_IDS=""
 
 # Copy the app.
 COPY . /code
+
+# Ensure entrypoint is executable (it will generate config.txt from env)
+RUN chmod 755 /code/docker/entrypoint.sh || true
+
+# Configure entrypoint that generates config from environment; the actual
+# command (uvicorn, python, etc.) is provided by docker-compose.
+ENTRYPOINT ["/code/docker/entrypoint.sh"]

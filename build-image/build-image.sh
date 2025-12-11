@@ -10,9 +10,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
+# Source git utilities for corruption detection
+if [ -f "${PROJECT_ROOT}/setup/modules/git_utils.sh" ]; then
+    source "${PROJECT_ROOT}/setup/modules/git_utils.sh"
+    GIT_UTILS_LOADED=true
+else
+    GIT_UTILS_LOADED=false
+fi
+
 echo "🏗️  Statechecker - Build Production Image"
 echo "=========================================="
 echo ""
+
+# Check for git corruption before building
+if [ "$GIT_UTILS_LOADED" = true ]; then
+    if detect_git_corruption; then
+        echo "⚠️  Warning: Git repository corruption detected!"
+        echo "   The build may show warnings about git commit information."
+        echo ""
+        check_and_offer_git_repair
+        echo ""
+    fi
+fi
 
 # Read current values from .env
 if [ -f .env ]; then
@@ -47,10 +66,35 @@ echo ""
 echo "📦 Building: $FULL_IMAGE"
 echo ""
 
-# Build the image
-docker build -t "$FULL_IMAGE" .
+# Determine target platform (default to linux/amd64 for Swarm nodes)
+TARGET_PLATFORM="${TARGET_PLATFORM:-linux/amd64}"
 
-if [ $? -eq 0 ]; then
+echo "Target platform: $TARGET_PLATFORM"
+echo ""
+
+# Build the image, capturing output for git corruption detection
+BUILD_EXIT_CODE=0
+if docker buildx version >/dev/null 2>&1; then
+    echo "📦 Using docker buildx for platform $TARGET_PLATFORM..."
+    BUILD_OUTPUT=$(docker buildx build --platform "$TARGET_PLATFORM" -t "$FULL_IMAGE" --load . 2>&1) || BUILD_EXIT_CODE=$?
+else
+    echo "📦 docker buildx not found, falling back to docker build (host architecture)..."
+    BUILD_OUTPUT=$(docker build -t "$FULL_IMAGE" . 2>&1) || BUILD_EXIT_CODE=$?
+fi
+
+echo "$BUILD_OUTPUT"
+
+# Check for git corruption in build output
+if [ "$GIT_UTILS_LOADED" = true ]; then
+    if check_git_corruption_in_output "$BUILD_OUTPUT"; then
+        echo ""
+        echo "⚠️  Git corruption warnings detected during build."
+        echo "   The image may have been built successfully, but git metadata is incomplete."
+        handle_git_error_in_output "$BUILD_OUTPUT" "Docker build"
+    fi
+fi
+
+if [ $BUILD_EXIT_CODE -eq 0 ]; then
     echo ""
     echo "✅ Image built successfully: $FULL_IMAGE"
     echo ""
@@ -60,39 +104,76 @@ if [ $? -eq 0 ]; then
     if [[ "$push_image" =~ ^[Yy]$ ]]; then
         echo ""
         echo "📤 Pushing to registry..."
-        docker push "$FULL_IMAGE"
         
-        if [ $? -eq 0 ]; then
+        if docker push "$FULL_IMAGE"; then
             echo "✅ Image pushed successfully"
-            
-            # Also tag and push as latest if version is not latest
-            if [ "$IMAGE_VERSION" != "latest" ]; then
-                read -p "Also push as 'latest'? (y/N): " push_latest
-                if [[ "$push_latest" =~ ^[Yy]$ ]]; then
-                    docker tag "$FULL_IMAGE" "${IMAGE_NAME}:latest"
-                    docker push "${IMAGE_NAME}:latest"
+        else
+            echo "❌ Initial push failed."
+            echo "   This is often due to missing or expired Docker login."
+            read -p "Run 'docker login' now and retry push? (y/N): " login_retry
+            if [[ "$login_retry" =~ ^[Yy]$ ]]; then
+                # Try to infer registry from IMAGE_NAME (e.g. ghcr.io/foo/bar)
+                registry=""
+                if [[ "$IMAGE_NAME" == */* ]]; then
+                    first_part="${IMAGE_NAME%%/*}"
+                    if [[ "$first_part" == *.* || "$first_part" == *:* ]]; then
+                        registry="$first_part"
+                    fi
+                fi
+
+                if [ -n "$registry" ]; then
+                    docker login "$registry" || { echo "❌ docker login failed"; exit 1; }
+                else
+                    docker login || { echo "❌ docker login failed"; exit 1; }
+                fi
+
+                echo ""
+                echo "📤 Retrying push to registry..."
+                if docker push "$FULL_IMAGE"; then
+                    echo "✅ Image pushed successfully"
+                else
+                    echo "❌ Failed to push image"
+                    exit 1
+                fi
+            else
+                echo "❌ Failed to push image"
+                exit 1
+            fi
+        fi
+
+        # Also tag and push as latest if version is not latest
+        if [ "$IMAGE_VERSION" != "latest" ]; then
+            read -p "Also push as 'latest'? (y/N): " push_latest
+            if [[ "$push_latest" =~ ^[Yy]$ ]]; then
+                docker tag "$FULL_IMAGE" "${IMAGE_NAME}:latest"
+                if docker push "${IMAGE_NAME}:latest"; then
                     echo "✅ Also pushed as ${IMAGE_NAME}:latest"
+                else
+                    echo "❌ Failed to push ${IMAGE_NAME}:latest"
+                    exit 1
                 fi
             fi
-        else
-            echo "❌ Failed to push image"
-            exit 1
         fi
     fi
     
-    # Update .env with new version
+    # Update .env with new version (portable, works on macOS and Linux)
     if [ -f .env ]; then
+        # Update or append IMAGE_NAME
         if grep -q '^IMAGE_NAME=' .env; then
-            sed -i "s|^IMAGE_NAME=.*|IMAGE_NAME=$IMAGE_NAME|" .env
+            tmp_env="$(mktemp)" || { echo "❌ Failed to create temp file"; exit 1; }
+            sed "s|^IMAGE_NAME=.*|IMAGE_NAME=$IMAGE_NAME|" .env > "$tmp_env" && mv "$tmp_env" .env
         else
             echo "IMAGE_NAME=$IMAGE_NAME" >> .env
         fi
-        
+
+        # Update or append IMAGE_VERSION
         if grep -q '^IMAGE_VERSION=' .env; then
-            sed -i "s|^IMAGE_VERSION=.*|IMAGE_VERSION=$IMAGE_VERSION|" .env
+            tmp_env="$(mktemp)" || { echo "❌ Failed to create temp file"; exit 1; }
+            sed "s|^IMAGE_VERSION=.*|IMAGE_VERSION=$IMAGE_VERSION|" .env > "$tmp_env" && mv "$tmp_env" .env
         else
             echo "IMAGE_VERSION=$IMAGE_VERSION" >> .env
         fi
+
         echo "✅ Updated .env with IMAGE_NAME=$IMAGE_NAME, IMAGE_VERSION=$IMAGE_VERSION"
     fi
 else

@@ -4,9 +4,9 @@
 	"adminStatusMessage_operationTime_offsetPercentage":"3.4",
 	"database":
 	{
-		"host":"10.5.0.1",
+		"host":"db",
 		"user":"state_checker",
-		"password":"ENTERYOURPASSWORD",
+		"password":"change_me_db_password",
   		"database":"state_checker",
   		"port":"3306"
 	},

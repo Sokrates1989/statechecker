@@ -20,3 +20,7 @@ logs/dayBased/*
 !logs/.gitkeep
 !logs/dayBased/
 !logs/dayBased/.gitkeep
+
+
+# .DS_Store files of macOS.
+.DS_Store
