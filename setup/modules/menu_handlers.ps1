@@ -83,43 +83,66 @@ function Show-MainMenu {
     $summary = $null
     $exitCode = 0
 
-    Write-Host "Choose an option:" -ForegroundColor Yellow
-    Write-Host "1) Start stack (docker compose up)" -ForegroundColor Gray
-    Write-Host "2) Start stack detached (background)" -ForegroundColor Gray
-    Write-Host "3) View logs" -ForegroundColor Gray
-    Write-Host "4) Docker Compose Down (stop containers)" -ForegroundColor Gray
-    Write-Host "5) Build Production Docker Image" -ForegroundColor Gray
-    Write-Host "6) DB Re-Install (reset database volume)" -ForegroundColor Gray
-    Write-Host "7) Exit" -ForegroundColor Gray
+    $menuNext = 1
+    $MENU_RUN_START = $menuNext; $menuNext++
+    $MENU_RUN_START_DETACHED = $menuNext; $menuNext++
+
+    $MENU_MONITOR_LOGS = $menuNext; $menuNext++
+
+    $MENU_MAINT_DOWN = $menuNext; $menuNext++
+    $MENU_MAINT_DB_REINSTALL = $menuNext; $menuNext++
+
+    $MENU_BUILD_IMAGE = $menuNext; $menuNext++
+
+    $MENU_EXIT = $menuNext
+
     Write-Host "" 
-    $choice = Read-Host "Your choice (1-7)"
+    Write-Host "================ Main Menu ================" -ForegroundColor Yellow
+    Write-Host "" 
+    Write-Host "Run:" -ForegroundColor Yellow
+    Write-Host "  $MENU_RUN_START) Start stack (docker compose up)" -ForegroundColor Gray
+    Write-Host "  $MENU_RUN_START_DETACHED) Start stack detached (background)" -ForegroundColor Gray
+    Write-Host "" 
+    Write-Host "Monitoring:" -ForegroundColor Yellow
+    Write-Host "  $MENU_MONITOR_LOGS) View logs" -ForegroundColor Gray
+    Write-Host "" 
+    Write-Host "Maintenance:" -ForegroundColor Yellow
+    Write-Host "  $MENU_MAINT_DOWN) Docker Compose Down (stop containers)" -ForegroundColor Gray
+    Write-Host "  $MENU_MAINT_DB_REINSTALL) DB Re-Install (reset database volume)" -ForegroundColor Gray
+    Write-Host "" 
+    Write-Host "Build:" -ForegroundColor Yellow
+    Write-Host "  $MENU_BUILD_IMAGE) Build Production Docker Image" -ForegroundColor Gray
+    Write-Host "" 
+    Write-Host "  $MENU_EXIT) Exit" -ForegroundColor Gray
+    Write-Host "" 
+    $choice = Read-Host "Your choice (1-$MENU_EXIT)"
 
     switch ($choice) {
-        "1" {
+        "$MENU_RUN_START" {
             Start-Stack -ComposeFile $ComposeFile
             $summary = "Stack started"
         }
-        "2" {
+        "$MENU_RUN_START_DETACHED" {
             Start-StackDetached -ComposeFile $ComposeFile
             $summary = "Stack started in background"
         }
-        "3" {
+        "$MENU_MONITOR_LOGS" {
             Show-Logs -ComposeFile $ComposeFile
             $summary = "Logs viewed"
         }
-        "4" {
+        "$MENU_MAINT_DOWN" {
             Invoke-DockerComposeDown -ComposeFile $ComposeFile
             $summary = "Docker Compose Down executed"
         }
-        "5" {
+        "$MENU_BUILD_IMAGE" {
             Build-ProductionImage
             $summary = "Image build executed"
         }
-        "6" {
+        "$MENU_MAINT_DB_REINSTALL" {
             Invoke-DbReinstall -ComposeFile $ComposeFile
             $summary = "DB re-install executed"
         }
-        "7" {
+        "$MENU_EXIT" {
             Write-Host "Goodbye!" -ForegroundColor Cyan
             exit 0
         }
