@@ -4,6 +4,17 @@
 #
 # Module for handling menu actions in quick-start script
 
+read_prompt() {
+    local prompt="$1"
+    local var_name="$2"
+
+    if [[ -r /dev/tty ]]; then
+        read -r -p "$prompt" "$var_name" < /dev/tty
+    else
+        read -r -p "$prompt" "$var_name"
+    fi
+}
+
 handle_db_reinstall() {
     local compose_file="$1"
 
@@ -18,7 +29,7 @@ handle_db_reinstall() {
     echo "If you want to preserve your current data, create a backup first (e.g. via phpMyAdmin)."
     echo "Local phpMyAdmin (if enabled) is available at http://localhost:\${PHPMYADMIN_PORT:-8080}"
     echo ""
-    read -p "Type 'yes' to continue: " confirm
+    read_prompt "Type 'yes' to continue: " confirm
     if [ "$confirm" != "yes" ]; then
         echo "Cancelled DB re-install."
         return
@@ -55,7 +66,7 @@ handle_docker_compose_down() {
     echo "🛑 Stopping containers..."
     echo "   Using compose file: $compose_file"
     echo ""
-    docker compose --env-file .env -f "$compose_file" down
+    docker compose --env-file .env -f "$compose_file" down --remove-orphans
     echo ""
     echo "✅ Containers stopped"
 }
@@ -118,7 +129,7 @@ show_main_menu() {
         echo "  ${MENU_EXIT}) Exit"
         echo ""
 
-        read -p "Your choice (1-${MENU_EXIT}): " choice
+        read_prompt "Your choice (1-${MENU_EXIT}): " choice
 
         case $choice in
           ${MENU_RUN_START})

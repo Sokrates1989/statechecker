@@ -85,67 +85,27 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "[OK] Image built successfully: $FULL_IMAGE" -ForegroundColor Green
     Write-Host ""
-    
-    # Ask about pushing
-    $pushImage = Read-Host "Push to registry? (y/N)"
-    if ($pushImage -match "^[Yy]$") {
-        Write-Host "" 
-        Write-Host "[PUSH] Pushing to registry..." -ForegroundColor Cyan
-        docker push $FULL_IMAGE
 
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERROR] Initial push failed." -ForegroundColor Red
-            Write-Host "        This is often due to missing or expired Docker login." -ForegroundColor Yellow
-            $loginRetry = Read-Host "Run 'docker login' now and retry push? (y/N)"
-            if ($loginRetry -match "^[Yy]$") {
-                # Try to infer registry from IMAGE_NAME (e.g. ghcr.io/foo/bar)
-                $registry = ""
-                if ($IMAGE_NAME -like "*/*") {
-                    $firstPart = $IMAGE_NAME.Split('/')[0]
-                    if ($firstPart -like "*.*" -or $firstPart -like "*:*") {
-                        $registry = $firstPart
-                    }
-                }
+    Write-Host "" 
+    Write-Host "[PUSH] Pushing to registry..." -ForegroundColor Cyan
+    docker push $FULL_IMAGE
 
-                if ([string]::IsNullOrWhiteSpace($registry)) {
-                    docker login
-                } else {
-                    docker login $registry
-                }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Failed to push image: $FULL_IMAGE" -ForegroundColor Red
+        Write-Host "        Please run 'docker login' for your registry and re-run the script." -ForegroundColor Yellow
+        exit 1
+    }
 
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Host "[ERROR] docker login failed" -ForegroundColor Red
-                    exit 1
-                }
+    Write-Host "[OK] Image pushed successfully" -ForegroundColor Green
 
-                Write-Host "" 
-                Write-Host "[PUSH] Retrying push to registry..." -ForegroundColor Cyan
-                docker push $FULL_IMAGE
-            } else {
-                Write-Host "[ERROR] Failed to push image" -ForegroundColor Red
-                exit 1
-            }
-        }
-
+    # Also tag and push as latest if version is not latest
+    if ($IMAGE_VERSION -ne "latest") {
+        docker tag $FULL_IMAGE "${IMAGE_NAME}:latest"
+        docker push "${IMAGE_NAME}:latest"
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "[OK] Image pushed successfully" -ForegroundColor Green
-
-            # Also tag and push as latest if version is not latest
-            if ($IMAGE_VERSION -ne "latest") {
-                $pushLatest = Read-Host "Also push as 'latest'? (y/N)"
-                if ($pushLatest -match "^[Yy]$") {
-                    docker tag $FULL_IMAGE "${IMAGE_NAME}:latest"
-                    docker push "${IMAGE_NAME}:latest"
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host "[OK] Also pushed as ${IMAGE_NAME}:latest" -ForegroundColor Green
-                    } else {
-                        Write-Host "[ERROR] Failed to push ${IMAGE_NAME}:latest" -ForegroundColor Red
-                        exit 1
-                    }
-                }
-            }
+            Write-Host "[OK] Also pushed as ${IMAGE_NAME}:latest" -ForegroundColor Green
         } else {
-            Write-Host "[ERROR] Failed to push image" -ForegroundColor Red
+            Write-Host "[ERROR] Failed to push ${IMAGE_NAME}:latest" -ForegroundColor Red
             exit 1
         }
     }
