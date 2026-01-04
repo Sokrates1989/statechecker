@@ -4,7 +4,8 @@
 
 This script is intended to run inside the Docker container. It will:
 
-- Create /code/config.txt from config.txt.template + environment variables
+- Create a persisted config file (default: /code/logs/config.txt) from
+  config.txt.template + environment variables
   when no config.txt exists yet AND STATECHECKER_SERVER_CONFIG is not set.
 - Leave existing config.txt or explicit STATECHECKER_SERVER_CONFIG untouched
   to avoid breaking existing deployments.
@@ -20,6 +21,40 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def _resolve_config_path() -> pathlib.Path:
+    """Resolve the config file path used by this generator.
+
+    Resolution order:
+        1) STATECHECKER_CONFIG_FILE
+        2) <repo_root>/logs/config.txt (persisted via docker-compose logs volume)
+        3) <repo_root>/config.txt (legacy)
+
+    Returns:
+        pathlib.Path: Target config path.
+    """
+
+    explicit = os.environ.get("STATECHECKER_CONFIG_FILE")
+    if explicit:
+        return pathlib.Path(explicit)
+
+    logs_config = ROOT / "logs" / "config.txt"
+    legacy_config = ROOT / "config.txt"
+
+    # Prefer existing persisted config.
+    if logs_config.exists():
+        return logs_config
+
+    # Respect existing legacy deployments.
+    if legacy_config.exists():
+        return legacy_config
+
+    # New setups: prefer persisted config when logs/ exists.
+    if logs_config.parent.exists():
+        return logs_config
+
+    return legacy_config
 
 
 def _load_json_template(path: pathlib.Path, fallback: dict) -> dict:
@@ -40,7 +75,7 @@ def generate_config_if_needed() -> None:
     - Otherwise, load config.txt.template and overlay selected values from env.
     """
 
-    config_path = ROOT / "config.txt"
+    config_path = _resolve_config_path()
 
     # 1) Respect existing config.txt
     if config_path.exists():
@@ -123,6 +158,7 @@ def generate_config_if_needed() -> None:
         gdrive["checkFilesEveryXMinutes"] = int(check_gdrive)
 
     # Finally, write out the generated config
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(cfg, indent=4), encoding="utf-8")
     print(f"[INFO] Generated statechecker config at {config_path}")
 

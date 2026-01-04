@@ -1,5 +1,9 @@
 # PYTHON.
-FROM python:3.9
+FROM python:3.13-slim
+
+# Install curl for health checks
+RUN apt-get update && apt-get install -y --no-install-recommends curl bash \
+    && rm -rf /var/lib/apt/lists/*
 
 # Enable Virtual Environment.
 ENV VIRTUAL_ENV=/opt/venv
@@ -75,8 +79,9 @@ ENV TELEGRAM_RECIPIENTS_INFO_CHAT_IDS=""
 COPY . /code
 
 # Ensure entrypoint is executable (it will generate config.txt from env)
-RUN chmod 755 /code/docker/entrypoint.sh || true
+RUN chmod 755 /code/docker/entrypoint.sh /code/docker/wait-for-it.sh || true \
+    && sed -i 's/\r$//' /code/docker/entrypoint.sh /code/docker/wait-for-it.sh || true
 
 # Configure entrypoint that generates config from environment; the actual
 # command (uvicorn, python, etc.) is provided by docker-compose.
-ENTRYPOINT ["/code/docker/entrypoint.sh"]
+ENTRYPOINT ["sh", "/code/docker/entrypoint.sh"]

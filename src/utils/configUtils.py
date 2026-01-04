@@ -19,6 +19,8 @@ import pytz
 # For safely parsing json string to dict (https://stackoverflow.com/questions/988228/convert-a-string-representation-of-a-dictionary-to-a-dictionary).
 import ast
 
+import configFileManager as ConfigFileManager
+
 
 class ConfigUtils:
     """
@@ -28,9 +30,13 @@ class ConfigUtils:
     def __init__(self):
           
         try:
-            config_file_pathAndName = os.path.join(os.path.dirname(__file__), "..", "..", "config.txt")
+            config_file_pathAndName = str(ConfigFileManager.resolve_config_file_path())
             config_file = open(config_file_pathAndName)
             self._config_array = json.load(config_file)
+            try:
+                ConfigFileManager.ensure_original_backup_exists()
+            except Exception:
+                pass
         except:
             # Get config array from Environment Variable.
             statechecker_server_config = os.getenv("STATECHECKER_SERVER_CONFIG")
@@ -80,10 +86,108 @@ class ConfigUtils:
         if websites_to_check:
             websites_to_check = [item.strip() for item in websites_to_check.strip().strip("\"").split(',')]
         else:
-            if "websites" in self._config_array:
-                if "websitesToCheck" in self._config_array["websites"]:
-                    websites_to_check = self._config_array["websites"]["websitesToCheck"]
+            config_source = self._config_array
+            if ConfigFileManager.is_file_based_config_available():
+                try:
+                    config_source = ConfigFileManager.load_config()
+                except Exception:
+                    config_source = self._config_array
+            if "websites" in config_source:
+                if "websitesToCheck" in config_source["websites"]:
+                    websites_to_check = config_source["websites"]["websitesToCheck"]
         return websites_to_check
+
+
+    def getIgnoredToolsUsingApi(self):
+        """Get a list of API tools that should be ignored (admin-disabled).
+
+        Note:
+            Deprecated: statechecker no longer uses a persisted ignore list for
+            "unwatch" semantics. Unwatching now deletes the tool from the DB and
+            the tool will re-appear automatically when the client sends a new ping.
+
+        Returns:
+            list: A list of tool names to ignore.
+        """
+
+        config_source = self._config_array
+        if ConfigFileManager.is_file_based_config_available():
+            try:
+                config_source = ConfigFileManager.load_config()
+            except Exception:
+                config_source = self._config_array
+
+        ignored = []
+        if "ignoredToolsUsingApi" in config_source:
+            ignored = config_source.get("ignoredToolsUsingApi")
+        return ignored if isinstance(ignored, list) else []
+
+
+    def getToolsUsingApiFrequencyOverrides(self):
+        """Get frequency overrides for API tools.
+
+        The override map is stored in config.txt under `toolsUsingApi_frequencyOverrides`.
+        If present, the server will enforce the configured frequency even if
+        clients send a different one.
+
+        Returns:
+            dict: Mapping {tool_name: frequency_in_minutes}.
+        """
+
+        config_source = self._config_array
+        if ConfigFileManager.is_file_based_config_available():
+            try:
+                config_source = ConfigFileManager.load_config()
+            except Exception:
+                config_source = self._config_array
+
+        overrides = config_source.get("toolsUsingApi_frequencyOverrides") if isinstance(config_source, dict) else None
+        return overrides if isinstance(overrides, dict) else {}
+
+
+    def getBackupFrequencyOverrides(self):
+        """Get frequency overrides for backups.
+
+        The override map is stored in config.txt under `backupFrequencyOverrides`.
+
+        Returns:
+            dict: Mapping {backup_name: frequency_in_minutes}.
+        """
+
+        config_source = self._config_array
+        if ConfigFileManager.is_file_based_config_available():
+            try:
+                config_source = ConfigFileManager.load_config()
+            except Exception:
+                config_source = self._config_array
+
+        overrides = config_source.get("backupFrequencyOverrides") if isinstance(config_source, dict) else None
+        return overrides if isinstance(overrides, dict) else {}
+
+
+    def getIgnoredBackups(self):
+        """Get a list of backups that should be ignored (admin-disabled).
+
+        Note:
+            Deprecated: statechecker no longer uses a persisted ignore list for
+            "unwatch" semantics. Unwatching now deletes the backup from the DB and
+            the backup will re-appear automatically when the client sends a new ping.
+
+        Returns:
+            list: A list of backup names to ignore.
+        """
+
+        config_source = self._config_array
+        if ConfigFileManager.is_file_based_config_available():
+            try:
+                config_source = ConfigFileManager.load_config()
+            except Exception:
+                config_source = self._config_array
+
+        ignored = []
+        if "ignoredBackups" in config_source:
+            ignored = config_source.get("ignoredBackups")
+        return ignored if isinstance(ignored, list) else []
 
 
     
@@ -517,7 +621,6 @@ class ConfigUtils:
         warnings = []  # A list to store any warnings encountered during processing.
         valid_emails = []  # A list to store valid email addresses.
 
-
         try:
             # If the input string is empty or 'None', return empty lists.
             if not emails_list_string or emails_list_string.lower() == "none":
@@ -542,18 +645,14 @@ class ConfigUtils:
             return valid_emails, warnings
 
     def _is_email_valid(self, email):
-        """
-        Check if the given email address is valid.
-        """
+        """Check if the given email address is valid."""
         email_regex = r'^[\w\.-]+@[a-zA-Z\d\.-]+\.[a-zA-Z]{2,}$'
         return re.match(email_regex, email) is not None
 
-    
 
     # Check Frequency.
     def getWebsiteChecksEveryXMinutes(self):
-        """
-        How often to check websiteStates?
+        """How often to check websiteStates?
 
         Returns:
             (int): Amount of minutes between each website checks.
@@ -563,53 +662,80 @@ class ConfigUtils:
             websiteChecksEveryXMinutes = websiteChecksEveryXMinutes.strip().strip("\"")
         else:
             websiteChecksEveryXMinutes = 30
-            if "websites" in self._config_array:
-                if "checkWebSitesEveryXMinutes" in self._config_array["websites"]:
-                    websiteChecksEveryXMinutes = self._config_array["websites"]["checkWebSitesEveryXMinutes"]
+            config_source = self._config_array
+            if ConfigFileManager.is_file_based_config_available():
+                try:
+                    config_source = ConfigFileManager.load_config()
+                except Exception:
+                    config_source = self._config_array
+            if "websites" in config_source:
+                if "checkWebSitesEveryXMinutes" in config_source["websites"]:
+                    websiteChecksEveryXMinutes = config_source["websites"]["checkWebSitesEveryXMinutes"]
         return int(websiteChecksEveryXMinutes)
-    
+
 
     # Google Drive.
     def getGoogleDriveFoldersToCheck(self):
-        """
-        Get google drive folders to check.
+        """Get google drive folders to check.
 
         Returns:
             (array): Google drive folders to check.
         """
+        config_source = self._config_array
+        if ConfigFileManager.is_file_based_config_available():
+            try:
+                config_source = ConfigFileManager.load_config()
+            except Exception:
+                config_source = self._config_array
+
         foldersToCheck = []
-        if "googleDrive" in self._config_array:
-            if "foldersToCheck" in self._config_array["googleDrive"]:
-                foldersToCheck = self._config_array["googleDrive"]["foldersToCheck"]
+        if "googleDrive" in config_source:
+            if "foldersToCheck" in config_source["googleDrive"]:
+                foldersToCheck = config_source["googleDrive"]["foldersToCheck"]
         return foldersToCheck
-    
+
 
     def getGoogleDriveServiceAccountCredentials(self):
-        """
-        Get google drive service account credentials.
+        """Get google drive service account credentials.
 
         Returns:
-            (credentials): Google drive service account credentials.
+            (credentials|None): Google drive service account credentials, or None if
+            Google Drive is not configured.
         """
         scope = ['https://www.googleapis.com/auth/drive.metadata.readonly']
         swarm_credentials_secret_json = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_FILE")
-        credentials = ""
+        if not swarm_credentials_secret_json:
+            return None
+
+        swarm_credentials_secret_json = swarm_credentials_secret_json.strip().strip("\"")
+        if swarm_credentials_secret_json.lower() == "none":
+            return None
 
         # If deployed via swarm -> use secret file, if not use service_account_key.json nin main directory.
         if swarm_credentials_secret_json == "/run/secrets/SET THIS ENVIRONMENT VAR IN SWARM DEPLOY ENVIRONMENTS":
-            credentials = ServiceAccountCredentials.from_json_keyfile_name('service_account_key.json', scope)
-        else:
-            GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_FILE = swarm_credentials_secret_json
-            with open(f"{GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_FILE}", "r") as googleDriveServiceAccountJson_file:
-                googleDriveServiceAccountJson_dict = ast.literal_eval(googleDriveServiceAccountJson_file.read().strip())
-                credentials = ServiceAccountCredentials. from_json_keyfile_dict(googleDriveServiceAccountJson_dict, scope)
-    
-        return credentials
-    
-    
+            if not os.path.exists("service_account_key.json"):
+                return None
+            try:
+                return ServiceAccountCredentials.from_json_keyfile_name('service_account_key.json', scope)
+            except Exception:
+                return None
+
+        if not os.path.exists(swarm_credentials_secret_json):
+            return None
+
+        try:
+            with open(f"{swarm_credentials_secret_json}", "r") as googleDriveServiceAccountJson_file:
+                raw = googleDriveServiceAccountJson_file.read().strip()
+                if not raw or raw.lower() == "none":
+                    return None
+                googleDriveServiceAccountJson_dict = ast.literal_eval(raw)
+                return ServiceAccountCredentials.from_json_keyfile_dict(googleDriveServiceAccountJson_dict, scope)
+        except Exception:
+            return None
+
+
     def getGoogleDriveChecksEveryXMinutes(self):
-        """
-        How often to check google drive folders?
+        """How often to check google drive folders?
 
         Returns:
             (int): Amount of minutes between each goolge drive folder checks.
@@ -619,16 +745,21 @@ class ConfigUtils:
             googleDriveChecksEveryXMinutes = googleDriveChecksEveryXMinutes.strip().strip("\"")
         else:
             googleDriveChecksEveryXMinutes = 60
-            if "googleDrive" in self._config_array:
-                if "checkFilesEveryXMinutes" in self._config_array["googleDrive"]:
-                    googleDriveChecksEveryXMinutes = self._config_array["googleDrive"]["checkFilesEveryXMinutes"]
+            config_source = self._config_array
+            if ConfigFileManager.is_file_based_config_available():
+                try:
+                    config_source = ConfigFileManager.load_config()
+                except Exception:
+                    config_source = self._config_array
+            if "googleDrive" in config_source:
+                if "checkFilesEveryXMinutes" in config_source["googleDrive"]:
+                    googleDriveChecksEveryXMinutes = config_source["googleDrive"]["checkFilesEveryXMinutes"]
         return int(googleDriveChecksEveryXMinutes)
-    
+
 
     # Other methods.
     def calculateOffset(self, base_to_calulate_offset_from):
-        """
-        Calculate reduced time based on provided offset.
+        """Calculate reduced time based on provided offset.
 
         Offset is caused from the time consumed by operation time of checking tools.
 
@@ -645,12 +776,10 @@ class ConfigUtils:
             calculated_value_with_offset = 1
 
         return float(calculated_value_with_offset)
-    
-    
+
 
     def getTimezone(self):
-        """
-        Get the timezone based on the environment variable TIMEZONE.
+        """Get the timezone based on the environment variable TIMEZONE.
 
         View all valid timezones: https://mljar.com/blog/list-pytz-timezones/
 
@@ -675,11 +804,8 @@ class ConfigUtils:
         return pytz.timezone(timezone)
 
 
-    
-
     def getServerAuthenticationToken(self):
-        """
-        Get token required to talk to api.
+        """Get token required to talk to api.
 
         Returns:
             (str): Server authentication token.
@@ -700,6 +826,5 @@ class ConfigUtils:
             server_auth_token = ""
             if "serverAuthenticationToken" in self._config_array:
                 server_auth_token = self._config_array["serverAuthenticationToken"]
-                    
+                
         return server_auth_token
-    

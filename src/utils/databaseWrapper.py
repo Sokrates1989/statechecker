@@ -74,6 +74,61 @@ class DatabaseWrapper:
 				return None
 		return stateCheckItem
 
+
+	def deleteBackupCheckByName(self, name):
+		"""Delete a backup check entry by name.
+
+		Args:
+			name (str): Backup name.
+		"""
+
+		query = "DELETE FROM checked_backups WHERE name=%s"
+		val = (name, )
+		self.mycursor.execute(query, val)
+		self.mydb.commit()
+
+
+	def updateBackupCheckFrequencyByName(self, name, stateCheckFrequency_inMinutes):
+		"""Update the check frequency for a backup by name.
+
+		Args:
+			name (str): Backup name.
+			stateCheckFrequency_inMinutes (int): New frequency in minutes.
+		"""
+
+		sql = "UPDATE checked_backups SET stateCheckFrequency_inMinutes = %s WHERE name = %s"
+		val = (stateCheckFrequency_inMinutes, name)
+		self.mycursor.execute(sql, val)
+		self.mydb.commit()
+
+
+	def updateToolCheckFrequencyByName(self, name, stateCheckFrequency_inMinutes):
+		"""Update the check frequency for a tool by name.
+
+		Args:
+			name (str): Tool name.
+			stateCheckFrequency_inMinutes (int): New frequency in minutes.
+		"""
+
+		sql = "UPDATE checked_tools SET stateCheckFrequency_inMinutes = %s WHERE name = %s"
+		val = (stateCheckFrequency_inMinutes, name)
+		self.mycursor.execute(sql, val)
+		self.mydb.commit()
+		return
+
+
+	def deleteToolCheckByName(self, name):
+		"""Delete a tool check entry by name.
+
+		Args:
+			name (str): Tool name.
+		"""
+
+		query = "DELETE FROM checked_tools WHERE name=%s"
+		val = (name, )
+		self.mycursor.execute(query, val)
+		self.mydb.commit()
+
 	# Get StateCheckItem by its name.
 	# Pass name as parameter.
 	# Return is stateCheckItem with DB ID or None.
@@ -483,4 +538,17 @@ class DatabaseWrapper:
 
 		# Return updated item.
 		return self.getWebsiteCheckItemByName(websiteCheckItem.name)
+
+
+	def deleteWebsiteCheckByName(self, name):
+		"""Delete a website check entry by name.
+
+		Args:
+			name (str): Website URL/name.
+		"""
+
+		query = "DELETE FROM checked_websites WHERE name=%s"
+		val = (name, )
+		self.mycursor.execute(query, val)
+		self.mydb.commit()
 

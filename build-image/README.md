@@ -25,7 +25,7 @@ The build script will:
 ## 📦 Image Details
 
 The built image contains:
-- Python 3.9 base
+- Python 3.13 base
 - FastAPI application (API service)
 - Website/tool/backup checker logic
 - Database connectivity (MySQL)

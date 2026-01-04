@@ -4,7 +4,16 @@
 #
 # Module for handling menu actions in quick-start script
 
+ MENU_HANDLERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ if [ -f "${MENU_HANDLERS_DIR}/db_helpers.sh" ]; then
+     source "${MENU_HANDLERS_DIR}/db_helpers.sh"
+ fi
+
 read_prompt() {
+    # Read a prompt from stdin (works in interactive and non-interactive shells).
+    # Args:
+    #   $1: prompt text
+    #   $2: variable name
     local prompt="$1"
     local var_name="$2"
 
@@ -15,45 +24,166 @@ read_prompt() {
     fi
 }
 
-handle_db_reinstall() {
+handle_build_web_image() {
+    echo "🏗️  Building website Docker image (nginx)..."
+    echo ""
+
+    if [ ! -f "Dockerfile_web" ]; then
+        echo "❌ Dockerfile_web not found"
+        return 1
+    fi
+
+    local image_name="sokrates1989/statechecker-web"
+    local image_version="latest"
+
+    if [ -f .env ]; then
+        image_name=$(grep "^WEB_IMAGE_NAME=" .env 2>/dev/null | cut -d'=' -f2- | tr -d ' "' || echo "$image_name")
+        image_version=$(grep "^WEB_IMAGE_VERSION=" .env 2>/dev/null | cut -d'=' -f2- | tr -d ' "' || echo "$image_version")
+    fi
+
+    read_prompt "Website image name [$image_name]: " input_name
+    if [ -n "$input_name" ]; then
+        image_name="$input_name"
+    fi
+
+    read_prompt "Website image version [$image_version]: " input_version
+    if [ -n "$input_version" ]; then
+        image_version="$input_version"
+    fi
+    if [ -z "$image_version" ]; then
+        image_version="latest"
+    fi
+
+    local full_image="${image_name}:${image_version}"
+    local target_platform="${TARGET_PLATFORM:-linux/amd64}"
+
+    echo "" 
+    echo "📦 Building: $full_image"
+    echo "Target platform: $target_platform"
+
+    if docker buildx version >/dev/null 2>&1; then
+        docker buildx build --platform "$target_platform" -t "$full_image" -f Dockerfile_web --load .
+    else
+        docker build -t "$full_image" -f Dockerfile_web .
+    fi
+
+    read_prompt "Push image to registry? (y/N): " push_choice
+    if [[ "$push_choice" =~ ^[Yy]$ ]]; then
+        docker push "$full_image"
+        echo "✅ Image pushed: $full_image"
+    fi
+
+    if [ -f .env ]; then
+        if grep -q '^WEB_IMAGE_NAME=' .env; then
+            tmp_env="$(mktemp)" || return 1
+            sed "s|^WEB_IMAGE_NAME=.*|WEB_IMAGE_NAME=$image_name|" .env > "$tmp_env" && mv "$tmp_env" .env
+        else
+            echo "WEB_IMAGE_NAME=$image_name" >> .env
+        fi
+        if grep -q '^WEB_IMAGE_VERSION=' .env; then
+            tmp_env="$(mktemp)" || return 1
+            sed "s|^WEB_IMAGE_VERSION=.*|WEB_IMAGE_VERSION=$image_version|" .env > "$tmp_env" && mv "$tmp_env" .env
+        else
+            echo "WEB_IMAGE_VERSION=$image_version" >> .env
+        fi
+    fi
+}
+
+handle_stack_start_detached_with_telegram() {
+    # Start the local stack detached including the Telegram admin bot listener.
+    # Args:
+    #   $1: compose_file
     local compose_file="$1"
 
-    if [ "$compose_file" != "local-deployment/docker-compose.yml" ]; then
-        echo "⚠️  DB re-install is only supported for local-deployment/docker-compose.yml."
-        return
+    echo "🚀 Starting Statechecker stack (detached, with telegram listener)..."
+    echo ""
+    if command -v show_relevant_pages_delayed >/dev/null 2>&1; then
+        show_relevant_pages_delayed "$compose_file" 120
     fi
+    docker compose --env-file .env -f "$compose_file" --profile telegram up --build -d
+    echo ""
+    echo "✅ Services started in background"
+    echo "📋 View logs with: docker compose --env-file .env -f $compose_file logs -f"
+}
 
-    echo "⚠️  This will completely reset the database volume (db_data) for Statechecker."
-    echo "    All existing data in that volume will be LOST."
+handle_stack_start_detached_with_telegram_and_web() {
+    # Start the local stack detached including Telegram admin bot listener and nginx web.
+    # Args:
+    #   $1: compose_file
+    local compose_file="$1"
+
+    echo "🚀 Starting Statechecker stack (detached, with telegram listener + web)..."
     echo ""
-    echo "If you want to preserve your current data, create a backup first (e.g. via phpMyAdmin)."
-    echo "Local phpMyAdmin (if enabled) is available at http://localhost:\${PHPMYADMIN_PORT:-8080}"
-    echo ""
-    read_prompt "Type 'yes' to continue: " confirm
-    if [ "$confirm" != "yes" ]; then
-        echo "Cancelled DB re-install."
-        return
+    if command -v show_relevant_pages_delayed >/dev/null 2>&1; then
+        show_relevant_pages_delayed "$compose_file" 120
     fi
-
+    docker compose --env-file .env -f "$compose_file" --profile telegram --profile web up --build -d
     echo ""
-    echo "🧹 Recreating containers and database volume (docker compose down -v / up --build)..."
-    docker compose --env-file .env -f "$compose_file" down -v
-    docker compose --env-file .env -f "$compose_file" up --build
+    echo "✅ Services started in background"
+    echo "📋 View logs with: docker compose --env-file .env -f $compose_file logs -f"
+}
+
+handle_db_reinstall() {
+    # Reinstall the DB by moving db_data to a backup folder and re-initializing.
+    # Args:
+    #   $1: compose_file
+    local compose_file="$1"
+    handle_db_reinstall_interactive "$compose_file" "Statechecker" "state_checker.sql"
 }
 
 handle_stack_start() {
+    # Start the local stack in foreground.
+    # Args:
+    #   $1: compose_file
     local compose_file="$1"
     
     echo "🚀 Starting Statechecker stack..."
     echo ""
+    if command -v show_relevant_pages_delayed >/dev/null 2>&1; then
+        show_relevant_pages_delayed "$compose_file" 120
+    fi
     docker compose --env-file .env -f "$compose_file" up --build
 }
 
+handle_stack_start_with_telegram() {
+    # Start the local stack in foreground including the Telegram admin bot listener.
+    # Args:
+    #   $1: compose_file
+    local compose_file="$1"
+
+    echo "🚀 Starting Statechecker stack (with telegram listener)..."
+    echo ""
+    if command -v show_relevant_pages_delayed >/dev/null 2>&1; then
+        show_relevant_pages_delayed "$compose_file" 120
+    fi
+    docker compose --env-file .env -f "$compose_file" --profile telegram up --build
+}
+
+handle_stack_start_with_telegram_and_web() {
+    # Start the local stack in foreground including Telegram admin bot listener and nginx web.
+    # Args:
+    #   $1: compose_file
+    local compose_file="$1"
+
+    echo "🚀 Starting Statechecker stack (with telegram listener + web)..."
+    echo ""
+    if command -v show_relevant_pages_delayed >/dev/null 2>&1; then
+        show_relevant_pages_delayed "$compose_file" 120
+    fi
+    docker compose --env-file .env -f "$compose_file" --profile telegram --profile web up --build
+}
+
 handle_stack_start_detached() {
+    # Start the local stack detached.
+    # Args:
+    #   $1: compose_file
     local compose_file="$1"
     
     echo "🚀 Starting Statechecker stack (detached)..."
     echo ""
+    if command -v show_relevant_pages_delayed >/dev/null 2>&1; then
+        show_relevant_pages_delayed "$compose_file" 120
+    fi
     docker compose --env-file .env -f "$compose_file" up --build -d
     echo ""
     echo "✅ Services started in background"
@@ -61,6 +191,9 @@ handle_stack_start_detached() {
 }
 
 handle_docker_compose_down() {
+    # Stop the local stack.
+    # Args:
+    #   $1: compose_file
     local compose_file="$1"
     
     echo "🛑 Stopping containers..."
@@ -72,6 +205,7 @@ handle_docker_compose_down() {
 }
 
 handle_build_image() {
+    # Build the production image (if build-image script exists).
     echo "🏗️  Building production Docker image..."
     echo ""
     if [ -f "build-image/build-image.sh" ]; then
@@ -82,6 +216,9 @@ handle_build_image() {
 }
 
 handle_view_logs() {
+    # Tail docker compose logs.
+    # Args:
+    #   $1: compose_file
     local compose_file="$1"
     
     echo "📋 Viewing logs..."
@@ -89,6 +226,9 @@ handle_view_logs() {
 }
 
 show_main_menu() {
+    # Show the interactive quick-start menu.
+    # Args:
+    #   $1: compose_file
     local compose_file="$1"
     
     local summary_msg=""
@@ -106,6 +246,7 @@ show_main_menu() {
         local MENU_MAINT_DB_REINSTALL=$MENU_NEXT; MENU_NEXT=$((MENU_NEXT+1))
 
         local MENU_BUILD_IMAGE=$MENU_NEXT; MENU_NEXT=$((MENU_NEXT+1))
+        local MENU_BUILD_WEB_IMAGE=$MENU_NEXT; MENU_NEXT=$((MENU_NEXT+1))
 
         local MENU_EXIT=$MENU_NEXT
 
@@ -113,8 +254,8 @@ show_main_menu() {
         echo "================ Main Menu ================"
         echo ""
         echo "Run:"
-        echo "  ${MENU_RUN_START}) Start stack (docker compose up)"
-        echo "  ${MENU_RUN_START_DETACHED}) Start stack detached (background)"
+        echo "  ${MENU_RUN_START}) Start all services"
+        echo "  ${MENU_RUN_START_DETACHED}) Start all services (detached)"
         echo ""
         echo "Monitoring:"
         echo "  ${MENU_MONITOR_LOGS}) View logs"
@@ -125,6 +266,7 @@ show_main_menu() {
         echo ""
         echo "Build:"
         echo "  ${MENU_BUILD_IMAGE}) Build Production Docker Image"
+        echo "  ${MENU_BUILD_WEB_IMAGE}) Build Website Docker Image (nginx)"
         echo ""
         echo "  ${MENU_EXIT}) Exit"
         echo ""
@@ -133,13 +275,13 @@ show_main_menu() {
 
         case $choice in
           ${MENU_RUN_START})
-            handle_stack_start "$compose_file"
-            summary_msg="Stack started"
+            handle_stack_start_with_telegram_and_web "$compose_file"
+            summary_msg="All services started"
             break
             ;;
           ${MENU_RUN_START_DETACHED})
-            handle_stack_start_detached "$compose_file"
-            summary_msg="Stack started in background"
+            handle_stack_start_detached_with_telegram_and_web "$compose_file"
+            summary_msg="All services started in background"
             break
             ;;
           ${MENU_MONITOR_LOGS})
@@ -155,6 +297,11 @@ show_main_menu() {
           ${MENU_BUILD_IMAGE})
             handle_build_image
             summary_msg="Image build executed"
+            break
+            ;;
+          ${MENU_BUILD_WEB_IMAGE})
+            handle_build_web_image
+            summary_msg="Website image build executed"
             break
             ;;
           ${MENU_MAINT_DB_REINSTALL})

@@ -1,57 +1,138 @@
-# statechecker-server-api-and-check
-Combined repo for both statechecker-server-check and statechecker-server-api-and-check
+# 🚀 statechecker (server) README
 
-To deploy use https://github.com/Sokrates1989/swarm-statechecker-server.git
+Python backend for the **statechecker** system.
 
-# Backlog
-Stuff to do, that just could not be done in time
-- Latency Check (consider website or tool down, if latency is too high)
-    - Add config option to setup threshold (and whether to use latency check at all (implicitly off, if there is no threshold duration set or set to zero))
-    - Add measurement of duration between request and response
-    - Add different message (display threshold and actual latency, if down)
-    - Different status message every hour, to tell user, that latency check is dis- or enabled. Also display current latency.
-- Messaging
-    - Email Make work with secret (Print/ Catch error of incorrect secret/ login)
-    - Telegram Make work with secret (Print/ Catch error of incorrect secret/ login)
-- Logging
-    - Log and print via telegram and email as well
-    - Log more
-- Other
-    - print every: customize in settings and allow disabling
-    - google drive folders as secret json instead of .env statechecker config json
+It contains:
 
+- **API** (FastAPI): endpoints used by `stateChecker-client`
+- **Worker**: periodic checks for tools/websites/backups
+- **MySQL** database schema and local Docker Compose setup
 
-# Push API to dockerhub
+<br>
+
+## Table of Contents
+
+1. [📖 Overview](#overview)
+2. [🧑‍💻 Usage](#usage)
+3. [🛠️ Installation & Setup](#installation--setup)
+4. [🧠 Configuration](#configuration)
+5. [🐞 Troubleshooting](#troubleshooting)
+6. [🚀 Summary](#summary)
+
+<br>
+
+# 📖 Overview
+
+The server stores tool state in MySQL and provides endpoints for the client:
+
+- `POST /v1/statecheck`
+- `POST /v1/backupcheck`
+- `POST /v1/statecheck/stop`
+- `POST /v1/backupcheck/stop`
+
+For health checks:
+
+- `GET /health`
+
+For **Docker Swarm deployment**, use the separate repo:
+
+- `swarm/swarm-statechecker`
+
+<br>
+<br>
+
+# 🧑‍💻 Usage
 
 ```bash
-docker image ls sokrates1989/statechecker-server-api-and-check
+# Start local stack (from repo root)
+docker compose --env-file .env -f local-deployment/docker-compose.yml up --build
+```
+
+Endpoints:
+
+- **API**: `http://localhost:8787` (or your configured `REST_API_PORT`)
+- **Health**: `http://localhost:8787/health`
+- **phpMyAdmin**: `http://localhost:8080` (or `PHPMYADMIN_PORT`)
+
+<br>
+<br>
+
+# 🛠️ Installation & Setup
+
+## 📌 Requirements
+
+- Docker + Docker Compose
+- (Optional) Python for running scripts locally
+
+## 📌 Quick start
+
+```powershell
+# Windows
+.\quick-start.ps1
 ```
 
 ```bash
-docker build -t statechecker-server-api-and-check .
-docker tag statechecker-server-api-and-check sokrates1989/statechecker-server-api-and-check:latest
-docker tag statechecker-server-api-and-check sokrates1989/statechecker-server-api-and-check:major.minor.patch
-docker login
-docker push sokrates1989/statechecker-server-api-and-check:latest
-docker push sokrates1989/statechecker-server-api-and-check:major.minor.patch
+# Linux/Mac
+./quick-start.sh
 ```
 
+<br>
+<br>
 
-## Debug images
+# 🧠 Configuration
 
-### Create
+## 📌 `.env`
 
-```bash
-docker build -t statechecker-server-api-and-check .
-docker tag statechecker-server-api-and-check sokrates1989/statechecker-server-api-and-check:DEBUG-major.minor.patch
-docker login
-docker push sokrates1989/statechecker-server-api-and-check:DEBUG-major.minor.patch
-docker image ls sokrates1989/statechecker-server-api-and-check
-git status
+Local compose uses `.env` in the repo root.
 
-```
-### Cleanup / Delete
-```bash
-docker rmi sokrates1989/statechecker-server-api-and-check:DEBUG-major.minor.patch
-```
+Relevant variables:
 
+- `REST_API_PORT`
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- `DB_WAIT_TIMEOUT` (seconds to wait for DB on container startup)
+- `SERVER_AUTHENTICATION_TOKEN`
+
+## 📌 Server config
+
+The server can load its config via:
+
+- `config.txt` (generated from `config.txt.template` by the entrypoint when needed)
+- `STATECHECKER_SERVER_CONFIG` (JSON string)
+
+Google Drive credentials are **optional**.
+
+<br>
+<br>
+
+# 🐞 Troubleshooting
+
+## 🧩 EntryPoint “no such file or directory”
+
+If you see `exec /code/docker/entrypoint.sh: no such file or directory` on Windows, ensure:
+
+- The entrypoint is executed via `sh` (avoids CRLF/shebang issues)
+- The Docker build normalizes line endings
+
+## 🧩 Database schema issues
+
+If the worker complains about missing tables, reset the local DB via the quick-start menu option:
+
+- `DB Re-Install`
+
+The DB reinstall will:
+
+- Move `db_data/` to `db_data__backup_<timestamp>/` (no auto-delete)
+- Re-initialize the DB using either:
+  - `install/database/state_checker.sql` (schema-only), or
+  - a selected `install/database/backup_*.sql` (optional)
+
+<br>
+<br>
+
+# 🚀 Summary
+
+✅ **Local stack** runs via Docker Compose (API + Worker + MySQL + phpMyAdmin).
+
+✅ **API health endpoint** is available at `/health`.
+
+✅ **Swarm deployment** is handled via `swarm/swarm-statechecker`.

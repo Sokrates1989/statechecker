@@ -14,6 +14,8 @@ SETUP_DIR="${SCRIPT_DIR}/setup"
 
 # Source modules
 source "${SETUP_DIR}/modules/docker_helpers.sh"
+source "${SETUP_DIR}/modules/db_helpers.sh"
+source "${SETUP_DIR}/modules/browser_helpers.sh"
 source "${SETUP_DIR}/modules/menu_handlers.sh"
 
 echo "🔍 Statechecker - Quick Start"
@@ -68,6 +70,15 @@ fi
 
 echo "📋 Using compose file: $COMPOSE_FILE"
 echo ""
+
+# Only prompt for DB init on first setup (empty db_data)
+if [ "$COMPOSE_FILE" = "local-deployment/docker-compose.yml" ]; then
+    if is_db_data_empty; then
+        DB_INIT_SOURCE=$(prompt_db_init_mode "$SCRIPT_DIR")
+        apply_db_init_source "$COMPOSE_FILE" "$DB_INIT_SOURCE" "state_checker.sql"
+        echo ""
+    fi
+fi
 
 # Show main menu
 show_main_menu "$COMPOSE_FILE"

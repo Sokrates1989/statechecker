@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Statechecker Admin</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Statechecker Admin</h1>
+    </header>
+
+    <main>
+      <div class="grid">
+        <section class="card">
+          <div class="row">
+            <div style="flex: 1">
+              <label for="apiBase">API Base URL</label>
+              <input id="apiBase" placeholder="http://localhost:8787" />
+              <div class="status">Tip: if you open this page via <strong>/admin</strong> from the API, leave it empty.</div>
+            </div>
+          </div>
+          <div style="height: 10px"></div>
+          <div class="row">
+            <div style="flex: 1">
+              <label for="token">SERVER_AUTHENTICATION_TOKEN</label>
+              <input id="token" type="password" placeholder="paste token" />
+            </div>
+          </div>
+          <div style="height: 12px"></div>
+          <div class="row">
+            <button class="primary" id="btnSave">Save</button>
+            <button id="btnReload">Reload</button>
+          </div>
+          <div class="status" id="status"></div>
+        </section>
+
+        <section class="card">
+          <div class="tabs" id="tabs">
+            <button class="tab active" data-tab="tools">Tools</button>
+            <button class="tab" data-tab="websites">Websites</button>
+            <button class="tab" data-tab="backups">Backups</button>
+            <button class="tab" data-tab="gdrive">Google Drive</button>
+            <button class="tab" data-tab="config">Config</button>
+          </div>
+          <div style="height: 12px"></div>
+
+          <div id="panel-tools" class="panel">
+            <div class="row">
+              <button class="primary" id="toolsRefresh">Refresh</button>
+            </div>
+            <div style="height: 10px"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Status</th>
+                  <th>Frequency</th>
+                  <th>Override</th>
+                  <th>Last up</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="toolsBody"></tbody>
+            </table>
+          </div>
+
+          <div id="panel-websites" class="panel" style="display:none">
+            <div class="row">
+              <div style="flex: 1">
+                <label>New website URL</label>
+                <input id="websiteUrl" placeholder="https://example.com/health" />
+              </div>
+              <button class="primary" id="websiteAdd">Add</button>
+              <button id="websitesRefresh">Refresh</button>
+            </div>
+            <div style="height: 10px"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th>URL</th>
+                  <th>State</th>
+                  <th>Down msg sent</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="websitesBody"></tbody>
+            </table>
+          </div>
+
+          <div id="panel-backups" class="panel" style="display:none">
+            <div class="row">
+              <button class="primary" id="backupsRefresh">Refresh</button>
+            </div>
+            <div style="height: 10px"></div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Frequency</th>
+                  <th>Override</th>
+                  <th>Most recent</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="backupsBody"></tbody>
+            </table>
+          </div>
+
+          <div id="panel-gdrive" class="panel" style="display:none">
+            <div class="two">
+              <div>
+                <label>Folder JSON (one object)</label>
+                <textarea id="gdriveFolderJson" class="mono" spellcheck="false"></textarea>
+                <div class="status">Example keys: <span class="mono">name, description, folderID, token, stateCheckFrequency_inMinutes</span></div>
+              </div>
+              <div>
+                <label>Remove by name</label>
+                <input id="gdriveRemoveName" placeholder="Folder name" />
+                <div style="height: 10px"></div>
+                <div class="row">
+                  <button class="primary" id="gdriveUpsert">Add/Update</button>
+                  <button class="danger" id="gdriveRemove">Remove</button>
+                  <button id="gdriveRefresh">Refresh</button>
+                </div>
+                <div style="height: 10px"></div>
+                <label>Configured folders</label>
+                <textarea id="gdriveList" class="mono" spellcheck="false" readonly></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div id="panel-config" class="panel" style="display:none">
+            <div class="row">
+              <button class="primary" id="configRefresh">Refresh</button>
+            </div>
+            <div style="height: 10px"></div>
+            <textarea id="configView" class="mono" spellcheck="false" readonly></textarea>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,46 +1,79 @@
-# 📁 Local Deployment
+# 📁 Local Deployment README
 
-This directory contains Docker Compose files for local development of Statechecker.
+Local Docker Compose setup for `python/statechecker`.
 
-## 📋 Compose Files
+<br>
 
-| File | Purpose |
-|------|---------|
-| `docker-compose.yml` | Full stack with API, checker, database, and phpMyAdmin |
+## Table of Contents
 
-## 🚀 Usage
+1. [📖 Overview](#overview)
+2. [🧑‍💻 Usage](#usage)
+3. [🛠️ Configuration / Installation / Setup](#configuration--installation--setup)
+4. [🔗 Endpoints](#endpoints)
+5. [🚀 Summary](#summary)
 
-### Start Full Stack
+<br>
+
+# 📖 Overview
+
+`docker-compose.yml` runs:
+
+- **api** (FastAPI)
+- **check** (worker)
+- **db** (MySQL)
+- **phpmyadmin** (optional)
+
+<br>
+<br>
+
+# 🧑‍💻 Usage
 
 ```bash
-# From project root
+# From repository root
 docker compose --env-file .env -f local-deployment/docker-compose.yml up --build
-```
 
-### Stop Services
-
-```bash
+# Stop
 docker compose --env-file .env -f local-deployment/docker-compose.yml down
-```
 
-### View Logs
-
-```bash
+# Logs
 docker compose --env-file .env -f local-deployment/docker-compose.yml logs -f
 ```
 
-## 📝 Configuration
+<br>
+<br>
 
-Make sure you have a `.env` file in the project root with:
-- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+# 🛠️ Configuration / Installation / Setup
+
+Ensure you have a `.env` file in the project root.
+
+Relevant variables:
+
 - `REST_API_PORT`
-- Telegram/Email notification settings
-- Website/backup check configuration
+- `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`
+- `DB_WAIT_TIMEOUT` (seconds to wait for DB on container startup)
+- `SERVER_AUTHENTICATION_TOKEN`
 
-See `setup/.env.template` for all options.
+See `setup/.env.template` for the full list.
 
-## 🔗 Endpoints
+Database initialization:
 
-Once running, the services are available at:
-- **API**: `http://localhost:8787` (or your configured `REST_API_PORT`)
-- **phpMyAdmin**: `http://localhost:8080`
+- Default: schema-only init via `install/database/state_checker.sql`
+- Optional: restore from a `install/database/backup_*.sql` file (select via quick-start and re-install)
+
+<br>
+<br>
+
+# 🔗 Endpoints
+
+- **API**: `http://localhost:8787` (or `REST_API_PORT`)
+- **Health**: `http://localhost:8787/health`
+- **phpMyAdmin**: `http://localhost:8080` (or `PHPMYADMIN_PORT`)
+
+<br>
+<br>
+
+# 🚀 Summary
+
+✅ This folder provides the local Docker Compose stack for development.
+
+✅ Use the repo root `.env` + `local-deployment/docker-compose.yml`.

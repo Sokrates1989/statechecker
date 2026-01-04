@@ -1,11 +1,7 @@
 ## Execute this file to test if tools are up and running.
 
 # Api for listening to bot commands.
-import telebot
 import time
-
-# Be able to write trace to logfile.
-import traceback
 
 # Import own classes.
 # Insert path to utils to allow importing them.
@@ -22,6 +18,8 @@ import logger as Logger
 import databaseWrapper as DatabaseWrapper
 import configUtils as ConfigUtils
 import emailUtils as EmailUtils
+import telegramNotificationUtils
+import checkWorkerMessageHandlers
 
 ## Initialize vars.
 
@@ -36,93 +34,13 @@ logger = Logger.Logger("check_tools")
 
 # Initialize bots.
 botToken = configUtils.getTelegramBotToken()
-bot = telebot.TeleBot(botToken, parse_mode="HTML")
 errorChatIDs = configUtils.getTelegramErrorChatsIDs()
 infoChatIDs = configUtils.getTelegramInfoChatsIDs()
 
+bot = telegramNotificationUtils.create_telegram_bot(configUtils)
+
 # Initialize email messaging.
 emailUtils = EmailUtils.EmailUtils()
-
-
-# Handles error exceptions (log and info to admin).
-def handleCommandException(exceptionLocationAndAdditionalInformation, exception):
-    # Log error.
-    errorLogText = exceptionLocationAndAdditionalInformation + " " + str(exception)
-
-    # Add traceback to logfile.
-    traceOfError = traceback.format_exc()
-    logger.logError(str(traceOfError) + "\n" + errorLogText)
-
-    # Send error message to admin telegram chat, if intended.
-    if configUtils.areTelegramStatusMessagesEnabled():
-        bot = telebot.TeleBot(botToken, parse_mode="HTML")
-        for errorChatID in errorChatIDs:
-            bot.send_message(errorChatID, errorLogText)
-
-    # Send mails.
-    emailUtils.send_error_mails(errorLogText)
-
-
-# Info, that checking schedule is still taking place (log and info).
-def infoCheckingToolsIsWorking(justStartedChecking=False, telegramTimeReached=False, emailTimeReached=False):
-    # Create info text.
-    infoLogText = "<b><u>Tools are being checked.</u></b>\nWebsites are being checked every <b>" + str(
-        checkWebsitesEveryXMinutes) + "</b> minutes"
-    if justStartedChecking:
-        infoLogText += "\nJust (re-)started checking tools.\n"
-        
-        # Telegram message enabled? -> Add frequency info.
-        if configUtils.areTelegramStatusMessagesEnabled():
-            infoLogText += "\nAbout every <b>" + str(telegramMessageEveryXMinutes) + "</b> minutes a telegram message should be send, to verify that this program is still working correctly."
-        
-        # Email message enabled? -> Add frequency info.
-        if configUtils.areEmailStatusMessagesEnabled():
-            infoLogText += "\nAbout every <b>" + str(emailMessageEveryXMinutes) + "</b> minutes a status email should be send, to verify that this program is still working correctly."
-    else:
-        infoLogText += "\n\nThis is an information to ensure, that the program is working correctly.\n"
-        
-        # Telegram message enabled and telegramtimeReached? -> Add frequency info.
-        if configUtils.areTelegramStatusMessagesEnabled() and telegramTimeReached:
-            infoLogText += "\nThis message should show up again in " + str(
-            telegramMessageEveryXMinutes) + " minutes, verifying that this program is still working correctly."
-        
-        # Email message enabled and emailtimeReached? -> Add frequency info.
-        if configUtils.areEmailStatusMessagesEnabled() and emailTimeReached:
-            infoLogText += "\nThis message should show up again in " + str(
-            emailMessageEveryXMinutes) + " minutes, verifying that this program is still working correctly."
-
-    infoLogText += "\nIf not -> Try to restart this program and take a look at the logs."
-
-    # Add status message of checked tools.
-    infoLogText += "\n\n" + stateCheckUtils.getToolStatesMessage()
-
-    # Log information.
-    logger.logInformation(infoLogText)
-
-    # Send message to admin telegram chat, if enabled and time reached.
-    if configUtils.areTelegramStatusMessagesEnabled() and (justStartedChecking or telegramTimeReached):
-
-        # Does message have to be split?
-        if len(infoLogText) > 4096:
-
-            # Split message.
-            individualMessages = stringUtils.splitLongTextIntoWorkingMessages(infoLogText)
-
-            # Send messages.
-            bot = telebot.TeleBot(botToken, parse_mode="HTML")
-            for individualMessage in individualMessages:
-                for infoChatID in infoChatIDs:
-                    bot.send_message(infoChatID, individualMessage)
-
-        else:
-            # Message does not have to be split.
-            bot = telebot.TeleBot(botToken, parse_mode="HTML")
-            for infoChatID in infoChatIDs:
-                bot.send_message(infoChatID, infoLogText)
-
-    # Send mails.
-    if justStartedChecking or emailTimeReached:
-        emailUtils.send_info_mails(infoLogText)
 
 
 ## Check whether a scheduled countdown has to be sent.
@@ -141,7 +59,19 @@ checkGoogleDriveEveryXMinutes = configUtils.getGoogleDriveChecksEveryXMinutes()
 
 i = 0
 print("checking ...")
-infoCheckingToolsIsWorking(True)
+checkWorkerMessageHandlers.infoCheckingToolsIsWorking(
+    logger=logger,
+    configUtils=configUtils,
+    bot=bot,
+    infoChatIDs=infoChatIDs,
+    emailUtils=emailUtils,
+    stringUtils=stringUtils,
+    stateCheckUtils=stateCheckUtils,
+    checkWebsitesEveryXMinutes=checkWebsitesEveryXMinutes,
+    telegramMessageEveryXMinutes=telegramMessageEveryXMinutes,
+    emailMessageEveryXMinutes=emailMessageEveryXMinutes,
+    justStartedChecking=True,
+)
 while True:
     try:
         # Always recreate database to avoid disconnection error.
@@ -206,9 +136,15 @@ while True:
                     
                     # Send message to admin telegram chat, if enabled.
                     if configUtils.areTelegramStatusMessagesEnabled():
-                        bot = telebot.TeleBot(botToken, parse_mode="HTML")
+                        reply_markup = telegramNotificationUtils.build_admin_inline_keyboard(toolStateItem)
                         for errorChatID in errorChatIDs:
-                            bot.send_message(errorChatID, toolStateItemIsDownMsg)
+                            telegramNotificationUtils.safe_send_telegram_message(
+                                bot=bot,
+                                logger=logger,
+                                chat_id=errorChatID,
+                                message=toolStateItemIsDownMsg,
+                                reply_markup=reply_markup,
+                            )
 
                     # Send mails.
                     emailUtils.send_error_mails(toolStateItemIsDownMsg)
@@ -249,24 +185,60 @@ while True:
                     
                     # Send message to admin telegram chat, if enabled.
                     if configUtils.areTelegramStatusMessagesEnabled():
-                        bot = telebot.TeleBot(botToken, parse_mode="HTML")
                         for errorChatID in errorChatIDs:
-                            bot.send_message(errorChatID, toolStateItemIsUpAgainMsg)
+                            telegramNotificationUtils.safe_send_telegram_message(
+                                bot=bot,
+                                logger=logger,
+                                chat_id=errorChatID,
+                                message=toolStateItemIsUpAgainMsg,
+                            )
 
                     # Send mails.
                     emailUtils.send_error_mails(toolStateItemIsUpAgainMsg)
 
         # Send info messages that tool is still checking.
         if (i % telegramMessageEveryXMinutes == 0):
-            infoCheckingToolsIsWorking(telegramTimeReached=True)
+            checkWorkerMessageHandlers.infoCheckingToolsIsWorking(
+                logger=logger,
+                configUtils=configUtils,
+                bot=bot,
+                infoChatIDs=infoChatIDs,
+                emailUtils=emailUtils,
+                stringUtils=stringUtils,
+                stateCheckUtils=stateCheckUtils,
+                checkWebsitesEveryXMinutes=checkWebsitesEveryXMinutes,
+                telegramMessageEveryXMinutes=telegramMessageEveryXMinutes,
+                emailMessageEveryXMinutes=emailMessageEveryXMinutes,
+                telegramTimeReached=True,
+            )
         if (i % emailMessageEveryXMinutes == 0):
-            infoCheckingToolsIsWorking(emailTimeReached=True)
+            checkWorkerMessageHandlers.infoCheckingToolsIsWorking(
+                logger=logger,
+                configUtils=configUtils,
+                bot=bot,
+                infoChatIDs=infoChatIDs,
+                emailUtils=emailUtils,
+                stringUtils=stringUtils,
+                stateCheckUtils=stateCheckUtils,
+                checkWebsitesEveryXMinutes=checkWebsitesEveryXMinutes,
+                telegramMessageEveryXMinutes=telegramMessageEveryXMinutes,
+                emailMessageEveryXMinutes=emailMessageEveryXMinutes,
+                emailTimeReached=True,
+            )
 
         # Sleep 60 seconds with calculated offset.
         time.sleep(configUtils.calculateOffset(60))
 
     except Exception as e:
-        handleCommandException("An Error occured while checking tools: ", str(e))
+        checkWorkerMessageHandlers.handleCommandException(
+            logger=logger,
+            configUtils=configUtils,
+            bot=bot,
+            errorChatIDs=errorChatIDs,
+            emailUtils=emailUtils,
+            exceptionLocationAndAdditionalInformation="An Error occured while checking tools: ",
+            exception=str(e),
+        )
 
         # Sleep 60 seconds with calculated offset.
         time.sleep(configUtils.calculateOffset(60))

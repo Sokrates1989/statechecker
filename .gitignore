@@ -24,3 +24,6 @@ logs/dayBased/*
 *__mariadb.sql
 
 .DS_Store
+
+# Local database data directory (used instead of Docker volumes for reliable persistence).
+db_data/

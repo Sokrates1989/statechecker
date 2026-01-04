@@ -8,6 +8,8 @@ from googleapiclient.discovery import build
 import time
 # For making POST / GET requests.
 import requests
+# For parsing and rewriting URLs.
+from urllib.parse import urlparse, urlunparse
 # For file operations with operating system.
 import os
 # For creating files.
@@ -149,10 +151,36 @@ def getToolStates_websites():
 
         # Try to call website.
         try:
-            x = requests.post(url)
+            urls_to_try = [url]
+            parsed = urlparse(url)
+            if parsed.hostname in ("localhost", "127.0.0.1") and parsed.scheme in ("http", "https"):
+                host = "host.docker.internal"
+                port = parsed.port
+                if port is None:
+                    port = 443 if parsed.scheme == "https" else 80
+                urls_to_try.append(
+                    urlunparse(
+                        parsed._replace(
+                            netloc=f"{host}:{port}",
+                        )
+                    )
+                )
 
-            # Is website considered down?
-            websiteIsUp = True if x.status_code == 200 else False
+            x = None
+            last_exc = None
+            for try_url in urls_to_try:
+                try:
+                    x = requests.get(try_url, timeout=10, allow_redirects=True)
+                    break
+                except Exception as exc:
+                    last_exc = exc
+                    x = None
+
+            if x is None:
+                raise last_exc if last_exc is not None else RuntimeError("request failed")
+
+            # Is website considered up?
+            websiteIsUp = True if int(x.status_code) < 400 else False
 
             # Add state of tool to return array.
             toolStateItem = ToolStateItem.ToolStateItem(
@@ -235,6 +263,11 @@ def getToolStates_backups():
 # MAKE SURE THAT FOLDER IS GIVEN READ RIGHTS TO ACCOUNT THAT HOLDS CREDENTIALS.
 # (See previously working folder's rights in Google Drive for more info)
 def updateGoogleDriveFolderBackupChecks():
+    """Update backup checks by reading newest files from configured Google Drive folders.
+
+    If Google Drive folders are configured but credentials are missing, this function
+    logs an error and exits.
+    """
 
     try:
 
@@ -247,6 +280,14 @@ def updateGoogleDriveFolderBackupChecks():
 
             # Connect to google drive.
             credentials = configUtils.getGoogleDriveServiceAccountCredentials()
+            if not credentials:
+                logger = Logger.Logger("check_tools")
+                logger.logError(
+                    "Google Drive folders are configured, but no Google Drive credentials are available. "
+                    "Set GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_FILE (path to JSON secret file) or provide "
+                    "service_account_key.json in the repository root for local testing."
+                )
+                return
             service = build('drive', 'v3', credentials=credentials)
 
             # Check all Google Drive folders of config.

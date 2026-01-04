@@ -1,6 +1,8 @@
 {
 	"serverAuthenticationToken": "RANDOM LONG STRING WITH SPECIAL CHARACTERS THAT MUST BE USED EVERY TIME TALKING TO THE API",
 	"toolsUsingApi_tolerancePeriod_inSeconds": "100",
+	"toolsUsingApi_frequencyOverrides": {},
+	"backupFrequencyOverrides": {},
 	"adminStatusMessage_operationTime_offsetPercentage":"3.4",
 	"database":
 	{

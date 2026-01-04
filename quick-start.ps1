@@ -6,8 +6,14 @@ $ErrorActionPreference = "Stop"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $setupDir = Join-Path $scriptDir "setup"
 
+ $dbHelpersPath = Join-Path $setupDir "modules\db_helpers.ps1"
+ if (Test-Path $dbHelpersPath) {
+     . $dbHelpersPath
+ }
+
 # Import modules
 Import-Module "$setupDir\modules\docker_helpers.ps1" -Force
+Import-Module "$setupDir\modules\browser_helpers.ps1" -Force
 Import-Module "$setupDir\modules\menu_handlers.ps1" -Force
 
 Write-Host "Statechecker - Quick Start" -ForegroundColor Cyan
@@ -58,6 +64,15 @@ if (-not (Test-Path $COMPOSE_FILE)) {
 
 Write-Host "Using compose file: $COMPOSE_FILE" -ForegroundColor Cyan
 Write-Host ""
+
+ # Only prompt for DB init on first setup (empty db_data)
+ if ($COMPOSE_FILE -eq "local-deployment\docker-compose.yml" -and (Test-Path $COMPOSE_FILE)) {
+     if (Test-DbDataEmpty -ProjectRoot $scriptDir) {
+         $dbInitSource = Invoke-PromptDbInitMode -ProjectRoot $scriptDir
+         Set-DbInitSource -ComposePath $COMPOSE_FILE -InitSource $dbInitSource -SchemaFilename "state_checker.sql"
+         Write-Host ""
+     }
+ }
 
 # Show main menu
 Show-MainMenu -ComposeFile $COMPOSE_FILE

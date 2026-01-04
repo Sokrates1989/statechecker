@@ -21,14 +21,17 @@ services:
       SERVER_AUTHENTICATION_TOKEN: ${SERVER_AUTHENTICATION_TOKEN}
       # Database connection
       DB_HOST: db
+      DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-state_checker}
       DB_PW: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME:-state_checker}
+      DB_WAIT_TIMEOUT: ${DB_WAIT_TIMEOUT:-60}
       # Config
       STATECHECKER_SERVER_CONFIG: ${STATECHECKER_SERVER_CONFIG:-}
     volumes:
       - ../src:/code/src:ro
       - ../main_api_startpoint.py:/code/main_api_startpoint.py:ro
+      - ../website:/code/website:ro
       - ../logs:/code/logs
     ports:
       - "${REST_API_PORT:-8787}:${REST_API_PORT:-8787}"
@@ -59,9 +62,11 @@ services:
       CHECK_GOOGLEDRIVE_EVERY_X_MINUTES: ${CHECK_GOOGLEDRIVE_EVERY_X_MINUTES:-60}
       # Database connection
       DB_HOST: db
+      DB_PORT: ${DB_PORT:-3306}
       DB_USER: ${DB_USER:-state_checker}
       DB_PW: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME:-state_checker}
+      DB_WAIT_TIMEOUT: ${DB_WAIT_TIMEOUT:-60}
       # Config
       STATECHECKER_SERVER_CONFIG: ${STATECHECKER_SERVER_CONFIG:-}
       # Messaging
@@ -87,6 +92,58 @@ services:
       - backend
     command: ["python", "src/check_tools.py"]
 
+  # Telegram Admin Bot Listener
+  telegram_admin_bot:
+    profiles:
+      - telegram
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Logging
+      PYTHONUNBUFFERED: "1"
+      TIMEZONE: ${TIMEZONE:-Europe/Berlin}
+      # Database connection
+      DB_HOST: db
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-state_checker}
+      DB_PW: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-state_checker}
+      DB_WAIT_TIMEOUT: ${DB_WAIT_TIMEOUT:-60}
+      # Config
+      STATECHECKER_SERVER_CONFIG: ${STATECHECKER_SERVER_CONFIG:-}
+      # Telegram
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_SENDER_BOT_TOKEN: ${TELEGRAM_SENDER_BOT_TOKEN:-}
+      TELEGRAM_RECIPIENTS_ERROR_CHAT_IDS: ${TELEGRAM_RECIPIENTS_ERROR_CHAT_IDS:-}
+      TELEGRAM_RECIPIENTS_INFO_CHAT_IDS: ${TELEGRAM_RECIPIENTS_INFO_CHAT_IDS:-}
+    volumes:
+      - ../src:/code/src:ro
+      - ../logs:/code/logs
+    networks:
+      - backend
+    command: ["python", "src/telegram_admin_bot.py"]
+
+  # Admin Website (nginx)
+  web:
+    profiles:
+      - web
+    build:
+      context: ..
+      dockerfile: Dockerfile_web
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_UPSTREAM: api:${REST_API_PORT:-8787}
+    ports:
+      - "${WEB_PORT:-8788}:80"
+    networks:
+      - backend
+
   # MySQL Database
   db:
     image: mysql:8.0
@@ -96,8 +153,9 @@ services:
       MYSQL_PASSWORD: ${DB_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root_password_change_me}
     volumes:
-      - db_data:/var/lib/mysql
-      - ../install/database/state_checker.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ../db_data:/var/lib/mysql
+      - ../install/database/state_checker.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+      # - ../install/database/backup_CHANGE_ME.sql:/docker-entrypoint-initdb.d/00-backup.sql:ro
     networks:
       - backend
     healthcheck:
@@ -126,6 +184,3 @@ services:
 networks:
   backend:
     driver: bridge
-
-volumes:
-  db_data:
