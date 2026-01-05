@@ -81,15 +81,13 @@ function Build-WebsiteImage {
         return
     }
 
-    $pushChoice = Read-Host "Push image to registry? (y/N)"
-    if ($pushChoice -match '^[Yy]$') {
-        docker push $FULL_IMAGE
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERROR] Push failed" -ForegroundColor Red
-            return
-        }
-        Write-Host "[OK] Image pushed: $FULL_IMAGE" -ForegroundColor Green
+    Write-Host "[PUSH] Pushing image to registry..." -ForegroundColor Cyan
+    docker push $FULL_IMAGE
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Push failed" -ForegroundColor Red
+        return
     }
+    Write-Host "[OK] Image pushed: $FULL_IMAGE" -ForegroundColor Green
 
     if (Test-Path .env) {
         $envLines = Get-Content .env -ErrorAction SilentlyContinue

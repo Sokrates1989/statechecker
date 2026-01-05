@@ -67,11 +67,9 @@ handle_build_web_image() {
         docker build -t "$full_image" -f Dockerfile_web .
     fi
 
-    read_prompt "Push image to registry? (y/N): " push_choice
-    if [[ "$push_choice" =~ ^[Yy]$ ]]; then
-        docker push "$full_image"
-        echo "✅ Image pushed: $full_image"
-    fi
+    echo "📤 Pushing image to registry..."
+    docker push "$full_image"
+    echo "✅ Image pushed: $full_image"
 
     if [ -f .env ]; then
         if grep -q '^WEB_IMAGE_NAME=' .env; then
