@@ -67,6 +67,48 @@ CREATE TABLE `checked_websites` (
   `isDownMessageHasBeenSent` tinyint NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Tabellenstruktur für Tabelle `config_websites`
+--
+
+CREATE TABLE `config_websites` (
+  `ID` bigint NOT NULL,
+  `url` varchar(2048) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `enabled` tinyint NOT NULL DEFAULT '1',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Tabellenstruktur für Tabelle `config_google_drive_folders`
+--
+
+CREATE TABLE `config_google_drive_folders` (
+  `ID` bigint NOT NULL,
+  `name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `description` text COLLATE utf8mb4_unicode_ci,
+  `folder_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `stateCheckFrequency_inMinutes` int NOT NULL DEFAULT 1440,
+  `enabled` tinyint NOT NULL DEFAULT '1',
+  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Tabellenstruktur für Tabelle `config_settings`
+--
+
+CREATE TABLE `config_settings` (
+  `ID` bigint NOT NULL,
+  `setting_key` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `setting_value` text COLLATE utf8mb4_unicode_ci,
+  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 --
 -- Indizes der exportierten Tabellen
 --
@@ -90,6 +132,27 @@ ALTER TABLE `checked_websites`
   ADD PRIMARY KEY (`ID`);
 
 --
+-- Indizes für die Tabelle `config_websites`
+--
+ALTER TABLE `config_websites`
+  ADD PRIMARY KEY (`ID`),
+  ADD UNIQUE KEY `url_unique` (`url`(255));
+
+--
+-- Indizes für die Tabelle `config_google_drive_folders`
+--
+ALTER TABLE `config_google_drive_folders`
+  ADD PRIMARY KEY (`ID`),
+  ADD UNIQUE KEY `name_unique` (`name`);
+
+--
+-- Indizes für die Tabelle `config_settings`
+--
+ALTER TABLE `config_settings`
+  ADD PRIMARY KEY (`ID`),
+  ADD UNIQUE KEY `setting_key_unique` (`setting_key`);
+
+--
 -- AUTO_INCREMENT für exportierte Tabellen
 --
 
@@ -109,6 +172,24 @@ ALTER TABLE `checked_tools`
 -- AUTO_INCREMENT für Tabelle `checked_websites`
 --
 ALTER TABLE `checked_websites`
+  MODIFY `ID` bigint NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT für Tabelle `config_websites`
+--
+ALTER TABLE `config_websites`
+  MODIFY `ID` bigint NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT für Tabelle `config_google_drive_folders`
+--
+ALTER TABLE `config_google_drive_folders`
+  MODIFY `ID` bigint NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT für Tabelle `config_settings`
+--
+ALTER TABLE `config_settings`
   MODIFY `ID` bigint NOT NULL AUTO_INCREMENT;
 COMMIT;
 

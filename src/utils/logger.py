@@ -1,8 +1,16 @@
-### Logs information and errors both in day based files and one big file. LogPath: PATH/TO/PRICETRACKER/logs/
+"""Module: logger.py
+
+Description:
+    Logging utilities for the statechecker server.
+
+    Logs information and errors to both day-based files and global log files.
+    Supports different service scopes: api, check, bot, web.
+"""
 
 ## Imports.
 # For file operations with operating system.
 import os
+import sys
 
 ## Own Modules.
 # For creating files.
@@ -11,20 +19,71 @@ import fileUtils
 import dateStringUtils
 
 
+# Service scope configuration for log prefixes
+SERVICE_SCOPES = {
+    "api": {
+        "info": "API_INFO",
+        "warning": "API_WARNING",
+        "error": "API_ERROR",
+    },
+    "check": {
+        "info": "CHECK_INFO",
+        "warning": "CHECK_WARNING",
+        "error": "CHECK_ERROR",
+    },
+    "check_tools": {  # Legacy alias for check
+        "info": "TOOLCHECKER_INFO",
+        "warning": "TOOLCHECKER_WARNING",
+        "error": "TOOLCHECKER_ERROR",
+    },
+    "bot": {
+        "info": "BOT_INFO",
+        "warning": "BOT_WARNING",
+        "error": "BOT_ERROR",
+    },
+    "web": {
+        "info": "WEB_INFO",
+        "warning": "WEB_WARNING",
+        "error": "WEB_ERROR",
+    },
+    "admin_api": {
+        "info": "ADMIN_API_INFO",
+        "warning": "ADMIN_API_WARNING",
+        "error": "ADMIN_API_ERROR",
+    },
+    "migration": {
+        "info": "MIGRATION_INFO",
+        "warning": "MIGRATION_WARNING",
+        "error": "MIGRATION_ERROR",
+    },
+}
+
+
 class Logger:
+	"""Logger class for writing to file and console.
 
-	# Constructor creating logfiles and paths.
+	Attributes:
+		logScope (str): The service scope for log prefixes.
+		logPath (str): Path to the logs directory.
+	"""
+
 	def __init__(self, logScope="check_tools"):
+		"""Initialize the logger with a specific scope.
 
-		# What am I logging stuff for?
-		if logScope == "check_tools":
-			self.logtext_info = "TOOLCHECKER_INFO"
-			self.logtext_warning = "TOOLCHECKER_WARNING"
-			self.logtext_error = "TOOLCHECKER_ERROR"
-		else:
-			self.logtext_info = "UNKNOWN_INFO"
-			self.logtext_warning = "UNKNOWN_WARNING"
-			self.logtext_error = "UNKNOWN_ERROR"
+		Args:
+			logScope (str): Service scope (api, check, bot, web, admin_api, migration).
+		"""
+		# Get scope configuration or use default
+		scope_config = SERVICE_SCOPES.get(logScope, {
+			"info": f"{logScope.upper()}_INFO",
+			"warning": f"{logScope.upper()}_WARNING",
+			"error": f"{logScope.upper()}_ERROR",
+		})
+
+		self.logtext_info = scope_config["info"]
+		self.logtext_warning = scope_config["warning"]
+		self.logtext_error = scope_config["error"]
+		self.logScope = logScope
 
 		# Global logs.
 		self.logPath = os.path.join("/code" , "logs")
@@ -36,7 +95,7 @@ class Logger:
 		# Daybased logs.
 		self.dayLogPath = os.path.join(self.logPath, "dayBased")
 		self.updateDayBasedLogFilePaths()
-		
+
 
 	# Create dayBased logfile paths.
 	def updateDayBasedLogFilePaths(self):

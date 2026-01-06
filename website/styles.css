@@ -29,6 +29,19 @@ header {
   position: sticky;
   top: 0;
   z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 h1 {
@@ -212,4 +225,101 @@ th {
   .two {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+footer {
+  text-align: center;
+  padding: 18px 20px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 20px;
+}
+
+footer p {
+  margin: 0;
+}
+
+footer #apiVersion,
+footer #webVersion {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+/* Status row with last refresh */
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.last-refresh {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+#lastRefresh {
+  color: var(--accent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+/* Action buttons inline */
+.actions-cell {
+  white-space: nowrap;
+}
+
+.actions-cell button {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.actions-cell button + button {
+  margin-left: 4px;
+}
+
+/* Refresh icon button */
+.refresh-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.refresh-icon-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.refresh-icon-btn:hover {
+  background: rgba(106, 168, 255, 0.15);
+}
+
+.refresh-icon {
+  transition: transform 0.3s ease;
+}
+
+.refresh-icon-btn.spinning .refresh-icon {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.auto-refresh-info {
+  font-size: 10px;
+  color: var(--muted);
+  opacity: 0.7;
 }

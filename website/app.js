@@ -8,15 +8,25 @@
  */
 const $ = (id) => document.getElementById(id);
 
+/** Track last refresh timestamp. */
+let lastRefreshTime = null;
+
+/** Auto-refresh interval ID. */
+let autoRefreshInterval = null;
+
+/** Time ago update interval ID. */
+let timeAgoInterval = null;
+
+/** Auto-refresh interval in milliseconds. */
+const AUTO_REFRESH_INTERVAL_MS = 60000;
+
 /**
  * Resolve API base URL from settings.
  *
- * @returns {string} Base URL without trailing slash.
+ * @returns {string} Base URL without trailing slash (always empty for relative paths).
  */
 function getApiBase() {
-  const raw = ($('apiBase').value || '').trim();
-  if (!raw) return '';
-  return raw.replace(/\/+$/, '');
+  return '';
 }
 
 /**
@@ -77,16 +87,21 @@ function setStatus(msg) {
  * Load settings from session storage.
  */
 function loadSettings() {
-  $('apiBase').value = sessionStorage.getItem('statechecker_admin_apiBase') || '';
   $('token').value = sessionStorage.getItem('statechecker_admin_token') || '';
 }
 
 /**
- * Save settings to session storage.
+ * Save settings to session storage and validate token by refreshing all data.
  */
-function saveSettings() {
-  sessionStorage.setItem('statechecker_admin_apiBase', $('apiBase').value || '');
+async function saveSettings() {
   sessionStorage.setItem('statechecker_admin_token', $('token').value || '');
+  setStatus('Validating token...');
+  try {
+    await refreshAll();
+    setStatus('Token saved, validated and refreshed states.');
+  } catch (e) {
+    setStatus('Token saved but validation failed: ' + String(e));
+  }
 }
 
 /**
@@ -98,8 +113,9 @@ function setActiveTab(tab) {
   for (const btn of document.querySelectorAll('#tabs .tab')) {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   }
-  for (const id of ['tools', 'websites', 'backups', 'gdrive', 'config']) {
-    $('panel-' + id).style.display = (id === tab) ? 'block' : 'none';
+  for (const id of ['tools', 'websites', 'backups', 'gdrive']) {
+    const panel = $('panel-' + id);
+    if (panel) panel.style.display = (id === tab) ? 'block' : 'none';
   }
 }
 
@@ -197,6 +213,53 @@ async function promptFrequencyChange(type, name) {
 }
 
 /**
+ * Refresh all data from server.
+ */
+async function refreshAll() {
+  await Promise.all([
+    refreshTools(),
+    refreshWebsites(),
+    refreshBackups(),
+    refreshGdrive()
+  ]);
+  updateLastRefreshTime();
+}
+
+/**
+ * Update the last refresh timestamp display.
+ */
+function updateLastRefreshTime() {
+  lastRefreshTime = new Date();
+  updateTimeAgoDisplay();
+}
+
+/**
+ * Update the time ago display.
+ */
+function updateTimeAgoDisplay() {
+  const el = $('lastRefresh');
+  if (!el || !lastRefreshTime) return;
+
+  const now = new Date();
+  const diffMs = now - lastRefreshTime;
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+
+  let timeAgo;
+  if (diffSecs < 5) {
+    timeAgo = 'just now';
+  } else if (diffSecs < 60) {
+    timeAgo = `${diffSecs}s ago`;
+  } else if (diffMins < 60) {
+    timeAgo = `${diffMins}m ago`;
+  } else {
+    timeAgo = `${Math.floor(diffMins / 60)}h ago`;
+  }
+
+  el.textContent = `${lastRefreshTime.toLocaleTimeString()} (${timeAgo})`;
+}
+
+/**
  * Refresh tools table.
  */
 async function refreshTools() {
@@ -220,7 +283,7 @@ async function refreshTools() {
       <td>${t.stateCheckFrequency_inMinutes ?? ''}</td>
       <td>${overridePill}</td>
       <td class="mono">${formatTimestamp(t.lastTimeToolWasUp)}</td>
-      <td>
+      <td class="actions-cell">
         <button data-act="delete" class="danger">Unwatch</button>
         <button data-act="freq" class="primary">Set Freq</button>
       </td>
@@ -235,7 +298,7 @@ async function refreshTools() {
         if (act === 'freq') {
           await promptFrequencyChange('tool', t.name);
         }
-        await refreshTools();
+        await refreshAll();
       });
     }
 
@@ -268,7 +331,7 @@ async function refreshWebsites() {
 
     tr.querySelector('button').addEventListener('click', async () => {
       await apiFetch('/v1/admin/websites', { method: 'DELETE', body: JSON.stringify({ url: w.url }) });
-      await refreshWebsites();
+      await refreshAll();
     });
 
     body.appendChild(tr);
@@ -276,14 +339,51 @@ async function refreshWebsites() {
 }
 
 /**
+ * Normalize and validate a website URL.
+ *
+ * @param {string} input - User input URL.
+ * @returns {string[]} Array of URLs to add (http and/or https variants).
+ */
+function normalizeWebsiteUrl(input) {
+  input = input.trim();
+  if (!input) return [];
+
+  // Already has a valid protocol
+  if (/^https?:\/\//i.test(input)) {
+    return [input];
+  }
+
+  // Remove any leading protocol-like patterns that are incomplete
+  input = input.replace(/^[a-z]+:\/*/i, '');
+
+  // Validate domain pattern (basic check)
+  const domainPattern = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(\/.*)?$/i;
+  if (!domainPattern.test(input)) {
+    return [];
+  }
+
+  // Add both http and https variants
+  return [`http://${input}`, `https://${input}`];
+}
+
+/**
  * Add website from input.
  */
 async function addWebsite() {
-  const url = ($('websiteUrl').value || '').trim();
-  if (!url) return;
-  await apiFetch('/v1/admin/websites', { method: 'POST', body: JSON.stringify({ url }) });
+  const rawUrl = ($('websiteUrl').value || '').trim();
+  if (!rawUrl) return;
+
+  const urls = normalizeWebsiteUrl(rawUrl);
+  if (urls.length === 0) {
+    alert('Invalid URL. Please enter a valid domain (e.g., example.com or https://example.com/health)');
+    return;
+  }
+
+  for (const url of urls) {
+    await apiFetch('/v1/admin/websites', { method: 'POST', body: JSON.stringify({ url }) });
+  }
   $('websiteUrl').value = '';
-  await refreshWebsites();
+  await refreshAll();
 }
 
 /**
@@ -304,7 +404,7 @@ async function refreshBackups() {
       <td>${b.stateCheckFrequency_inMinutes ?? ''}</td>
       <td>${overridePill}</td>
       <td class="mono">${formatTimestamp(b.mostRecentBackupFile_creationDate)}</td>
-      <td>
+      <td class="actions-cell">
         <button data-act="delete" class="danger">Unwatch</button>
         <button data-act="freq" class="primary">Set Freq</button>
       </td>
@@ -319,7 +419,7 @@ async function refreshBackups() {
         if (act === 'freq') {
           await promptFrequencyChange('backup', b.name);
         }
-        await refreshBackups();
+        await refreshAll();
       });
     }
 
@@ -384,14 +484,13 @@ function escapeHtml(s) {
  */
 function wireUi() {
   $('btnSave').addEventListener('click', async () => {
-    saveSettings();
-    setStatus('Saved.');
+    await saveSettings();
   });
 
   $('btnReload').addEventListener('click', async () => {
     try {
       setStatus('Loading...');
-      await refreshTools();
+      await refreshAll();
       setStatus('Loaded.');
     } catch (e) {
       setStatus(String(e));
@@ -404,14 +503,97 @@ function wireUi() {
     });
   }
 
-  $('toolsRefresh').addEventListener('click', () => refreshTools().catch((e) => setStatus(String(e))));
-  $('websitesRefresh').addEventListener('click', () => refreshWebsites().catch((e) => setStatus(String(e))));
+  $('toolsRefresh').addEventListener('click', () => refreshAll().catch((e) => setStatus(String(e))));
+  $('websitesRefresh').addEventListener('click', () => refreshAll().catch((e) => setStatus(String(e))));
   $('websiteAdd').addEventListener('click', () => addWebsite().catch((e) => setStatus(String(e))));
-  $('backupsRefresh').addEventListener('click', () => refreshBackups().catch((e) => setStatus(String(e))));
-  $('gdriveRefresh').addEventListener('click', () => refreshGdrive().catch((e) => setStatus(String(e))));
+  $('backupsRefresh').addEventListener('click', () => refreshAll().catch((e) => setStatus(String(e))));
+  $('gdriveRefresh').addEventListener('click', () => refreshAll().catch((e) => setStatus(String(e))));
   $('gdriveUpsert').addEventListener('click', () => upsertGdrive().catch((e) => setStatus(String(e))));
   $('gdriveRemove').addEventListener('click', () => removeGdrive().catch((e) => setStatus(String(e))));
-  $('configRefresh').addEventListener('click', () => refreshConfig().catch((e) => setStatus(String(e))));
+  $('refreshIcon').addEventListener('click', () => triggerRefreshWithAnimation());
+}
+
+/**
+ * Fetch and display API version in footer.
+ */
+async function fetchApiVersion() {
+  try {
+    const res = await fetch('/version');
+    if (res.ok) {
+      const data = await res.json();
+      $('apiVersion').textContent = data.version || 'unknown';
+    } else {
+      $('apiVersion').textContent = 'unavailable';
+    }
+  } catch (e) {
+    $('apiVersion').textContent = 'unavailable';
+  }
+}
+
+/**
+ * Fetch and display Web image version in footer.
+ */
+async function fetchWebVersion() {
+  try {
+    const res = await fetch('/web-version.json');
+    if (res.ok) {
+      const data = await res.json();
+      $('webVersion').textContent = data.version || 'unknown';
+    } else {
+      $('webVersion').textContent = 'local';
+    }
+  } catch (e) {
+    $('webVersion').textContent = 'local';
+  }
+}
+
+/**
+ * Start auto-refresh interval.
+ */
+function startAutoRefresh() {
+  if (autoRefreshInterval) {
+    clearInterval(autoRefreshInterval);
+  }
+  autoRefreshInterval = setInterval(async () => {
+    try {
+      await refreshAll();
+    } catch (e) {
+      // Silently fail on auto-refresh errors
+    }
+  }, AUTO_REFRESH_INTERVAL_MS);
+}
+
+/**
+ * Start time ago update interval (every 10 seconds).
+ */
+function startTimeAgoUpdater() {
+  if (timeAgoInterval) {
+    clearInterval(timeAgoInterval);
+  }
+  timeAgoInterval = setInterval(() => {
+    updateTimeAgoDisplay();
+  }, 10000); // Update every 10 seconds
+}
+
+/**
+ * Trigger refresh with animation.
+ */
+async function triggerRefreshWithAnimation() {
+  const btn = $('refreshIcon');
+  if (btn) {
+    btn.classList.add('spinning');
+  }
+  try {
+    setStatus('Refreshing...');
+    await refreshAll();
+    setStatus('Refreshed.');
+  } catch (e) {
+    setStatus(String(e));
+  } finally {
+    if (btn) {
+      btn.classList.remove('spinning');
+    }
+  }
 }
 
 /**
@@ -420,9 +602,13 @@ function wireUi() {
 async function init() {
   loadSettings();
   wireUi();
+  fetchApiVersion();
+  fetchWebVersion();
+  startAutoRefresh();
+  startTimeAgoUpdater();
   try {
     setStatus('Loading...');
-    await refreshTools();
+    await refreshAll();
     setStatus('Loaded.');
   } catch (e) {
     setStatus(String(e));

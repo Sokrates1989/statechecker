@@ -9,19 +9,23 @@
   <body>
     <header>
       <h1>Statechecker Admin</h1>
+      <div class="header-status">
+        <span class="refresh-info">
+          <button class="refresh-icon-btn" id="refreshIcon" title="Refresh all data">
+            <svg class="refresh-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+          <span class="last-refresh">Last: <span id="lastRefresh">-</span></span>
+          <span class="auto-refresh-info">(auto: 1m)</span>
+        </span>
+      </div>
     </header>
 
     <main>
       <div class="grid">
         <section class="card">
-          <div class="row">
-            <div style="flex: 1">
-              <label for="apiBase">API Base URL</label>
-              <input id="apiBase" placeholder="http://localhost:8787" />
-              <div class="status">Tip: if you open this page via <strong>/admin</strong> from the API, leave it empty.</div>
-            </div>
-          </div>
-          <div style="height: 10px"></div>
           <div class="row">
             <div style="flex: 1">
               <label for="token">SERVER_AUTHENTICATION_TOKEN</label>
@@ -33,7 +37,7 @@
             <button class="primary" id="btnSave">Save</button>
             <button id="btnReload">Reload</button>
           </div>
-          <div class="status" id="status"></div>
+          <div id="status" class="status"></div>
         </section>
 
         <section class="card">
@@ -42,7 +46,6 @@
             <button class="tab" data-tab="websites">Websites</button>
             <button class="tab" data-tab="backups">Backups</button>
             <button class="tab" data-tab="gdrive">Google Drive</button>
-            <button class="tab" data-tab="config">Config</button>
           </div>
           <div style="height: 12px"></div>
 
@@ -131,16 +134,13 @@
             </div>
           </div>
 
-          <div id="panel-config" class="panel" style="display:none">
-            <div class="row">
-              <button class="primary" id="configRefresh">Refresh</button>
-            </div>
-            <div style="height: 10px"></div>
-            <textarea id="configView" class="mono" spellcheck="false" readonly></textarea>
-          </div>
         </section>
       </div>
     </main>
+
+    <footer>
+      <p>Statechecker Admin | API: <span id="apiVersion">loading...</span> | Web: <span id="webVersion">loading...</span></p>
+    </footer>
 
     <script src="app.js"></script>
   </body>

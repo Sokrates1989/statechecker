@@ -76,10 +76,10 @@ echo ""
 BUILD_EXIT_CODE=0
 if docker buildx version >/dev/null 2>&1; then
     echo "📦 Using docker buildx for platform $TARGET_PLATFORM..."
-    BUILD_OUTPUT=$(docker buildx build --platform "$TARGET_PLATFORM" -t "$FULL_IMAGE" --load . 2>&1) || BUILD_EXIT_CODE=$?
+    BUILD_OUTPUT=$(docker buildx build --platform "$TARGET_PLATFORM" -t "$FULL_IMAGE" --build-arg IMAGE_TAG="$IMAGE_VERSION" --load . 2>&1) || BUILD_EXIT_CODE=$?
 else
     echo "📦 docker buildx not found, falling back to docker build (host architecture)..."
-    BUILD_OUTPUT=$(docker build -t "$FULL_IMAGE" . 2>&1) || BUILD_EXIT_CODE=$?
+    BUILD_OUTPUT=$(docker build -t "$FULL_IMAGE" --build-arg IMAGE_TAG="$IMAGE_VERSION" . 2>&1) || BUILD_EXIT_CODE=$?
 fi
 
 echo "$BUILD_OUTPUT"

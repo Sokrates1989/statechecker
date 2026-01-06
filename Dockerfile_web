@@ -1,6 +1,13 @@
 FROM nginx:alpine
 
+# Build argument for web image version (baked at build time)
+ARG WEB_IMAGE_TAG=dev
+ENV WEB_IMAGE_TAG=${WEB_IMAGE_TAG}
+
 RUN apk add --no-cache gettext
 
 COPY website/ /usr/share/nginx/html/
 COPY docker/nginx/default.conf.template /etc/nginx/templates/default.conf.template
+
+# Create web-version.json with baked version
+RUN echo "{\"version\":\"${WEB_IMAGE_TAG}\",\"title\":\"Statechecker Web\"}" > /usr/share/nginx/html/web-version.json

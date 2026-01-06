@@ -14,14 +14,14 @@ from __future__ import annotations
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Header, Query
+from pydantic import BaseModel, Field
 
-import configFileManager as ConfigFileManager
+import configUtils as ConfigUtils
+import database_config_manager as DbConfig
 import databaseWrapper as DatabaseWrapper
 import logger as Logger
 import telegramNotificationUtils
-from adminApiCommon import NameRequest, require_admin_auth
-from pydantic import BaseModel, Field
-import configUtils as ConfigUtils
+from adminApiCommon import NameRequest, require_admin_auth_readonly
 
 
 configUtils = ConfigUtils.ConfigUtils()
@@ -83,7 +83,7 @@ def admin_list_tools(
         Dict[str, Any]: Tools list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     overrides = configUtils.getToolsUsingApiFrequencyOverrides()
     db = DatabaseWrapper.DatabaseWrapper()
@@ -126,7 +126,7 @@ def admin_delete_tool(
         Dict[str, Any]: Updated ignore list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     try:
         db = DatabaseWrapper.DatabaseWrapper()
@@ -148,7 +148,7 @@ def admin_set_tool_frequency(
         alias="X-Server-Authentication-Token",
     ),
 ) -> Dict[str, Any]:
-    """Set a persisted frequency override for an API tool.
+    """Set a persisted frequency override for an API tool in database.
 
     Args:
         request (ToolFrequencyRequest): Tool name and new frequency.
@@ -159,18 +159,12 @@ def admin_set_tool_frequency(
         Dict[str, Any]: The updated overrides mapping.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
-    def _update(cfg: Dict[str, Any]) -> Dict[str, Any]:
-        overrides = cfg.get("toolsUsingApi_frequencyOverrides")
-        if not isinstance(overrides, dict):
-            overrides = {}
-        overrides[request.name] = int(request.stateCheckFrequency_inMinutes)
-        cfg["toolsUsingApi_frequencyOverrides"] = overrides
-        return cfg
+    # Store override in database
+    DbConfig.set_tool_frequency_override(request.name, int(request.stateCheckFrequency_inMinutes))
 
-    ConfigFileManager.update_config(_update)
-
+    # Also update the checked_tools table if the tool exists
     try:
         DatabaseWrapper.DatabaseWrapper().updateToolCheckFrequencyByName(request.name, int(request.stateCheckFrequency_inMinutes))
     except Exception:

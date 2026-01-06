@@ -19,12 +19,12 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Body, Header, Query
 from pydantic import BaseModel, Field
 
-import configFileManager as ConfigFileManager
 import configUtils as ConfigUtils
+import database_config_manager as DbConfig
 import databaseWrapper as DatabaseWrapper
 import logger as Logger
 import telegramNotificationUtils
-from adminApiCommon import NameRequest, ensure_list, require_admin_auth
+from adminApiCommon import NameRequest, require_admin_auth_readonly
 
 
 configUtils = ConfigUtils.ConfigUtils()
@@ -85,7 +85,7 @@ def admin_list_backups(
         Dict[str, Any]: Backups list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     overrides = configUtils.getBackupFrequencyOverrides()
     db = DatabaseWrapper.DatabaseWrapper()
@@ -129,25 +129,17 @@ def admin_delete_backup(
         Dict[str, Any]: Updated ignore list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     name = request.name
 
-    if ConfigFileManager.is_file_based_config_available():
+    # Remove Google Drive folder config from database if exists
+    try:
+        DbConfig.remove_google_drive_folder(name)
+    except Exception:
+        pass
 
-        def _update(cfg: Dict[str, Any]) -> Dict[str, Any]:
-            google_drive = cfg.setdefault("googleDrive", {})
-            folders = ensure_list(google_drive.get("foldersToCheck"))
-            google_drive["foldersToCheck"] = [
-                f for f in folders if not (isinstance(f, dict) and f.get("name") == name)
-            ]
-            return cfg
-
-        try:
-            ConfigFileManager.update_config(_update)
-        except Exception:
-            pass
-
+    # Remove backup check from database
     try:
         db = DatabaseWrapper.DatabaseWrapper()
         db.deleteBackupCheckByName(name)
@@ -179,18 +171,12 @@ def admin_set_backup_frequency(
         Dict[str, Any]: The updated overrides mapping.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
-    def _update(cfg: Dict[str, Any]) -> Dict[str, Any]:
-        overrides = cfg.get("backupFrequencyOverrides")
-        if not isinstance(overrides, dict):
-            overrides = {}
-        overrides[request.name] = int(request.stateCheckFrequency_inMinutes)
-        cfg["backupFrequencyOverrides"] = overrides
-        return cfg
+    # Store override in database
+    DbConfig.set_backup_frequency_override(request.name, int(request.stateCheckFrequency_inMinutes))
 
-    ConfigFileManager.update_config(_update)
-
+    # Also update the checked_backups table if the backup exists
     try:
         DatabaseWrapper.DatabaseWrapper().updateBackupCheckFrequencyByName(request.name, int(request.stateCheckFrequency_inMinutes))
     except Exception:

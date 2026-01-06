@@ -75,10 +75,10 @@ try {
 
 if ($useBuildx) {
     Write-Host "[BUILD] Using docker buildx for platform $TargetPlatform..." -ForegroundColor Cyan
-    docker buildx build --platform $TargetPlatform -t $FULL_IMAGE --load .
+    docker buildx build --platform $TargetPlatform -t $FULL_IMAGE --build-arg IMAGE_TAG=$IMAGE_VERSION --load .
 } else {
     Write-Host "[BUILD] docker buildx not found, falling back to docker build (host architecture)..." -ForegroundColor Yellow
-    docker build -t $FULL_IMAGE .
+    docker build -t $FULL_IMAGE --build-arg IMAGE_TAG=$IMAGE_VERSION .
 }
 
 if ($LASTEXITCODE -eq 0) {

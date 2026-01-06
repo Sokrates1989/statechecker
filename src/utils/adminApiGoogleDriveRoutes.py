@@ -9,13 +9,13 @@ Description:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Header, Query
 
-import configFileManager as ConfigFileManager
+import database_config_manager as DbConfig
 import databaseWrapper as DatabaseWrapper
-from adminApiCommon import GoogleDriveFolderRequest, NameRequest, ensure_list, pydantic_model_to_dict, require_admin_auth
+from adminApiCommon import GoogleDriveFolderRequest, NameRequest, require_admin_auth_readonly
 
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
@@ -29,7 +29,7 @@ def admin_list_google_drive_folders(
         alias="X-Server-Authentication-Token",
     ),
 ) -> Dict[str, Any]:
-    """List configured Google Drive folder checks.
+    """List configured Google Drive folder checks from database.
 
     Args:
         server_auth_token (Optional[str]): Token provided as query parameter.
@@ -39,13 +39,9 @@ def admin_list_google_drive_folders(
         Dict[str, Any]: Folder checks.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
-    cfg = ConfigFileManager.load_config()
-    folders = []
-    if "googleDrive" in cfg:
-        folders = ensure_list(cfg.get("googleDrive", {}).get("foldersToCheck"))
-
+    folders = DbConfig.get_google_drive_folders()
     return {"foldersToCheck": folders}
 
 
@@ -58,7 +54,7 @@ def admin_add_google_drive_folder(
         alias="X-Server-Authentication-Token",
     ),
 ) -> Dict[str, Any]:
-    """Add or update a Google Drive folder check configuration.
+    """Add or update a Google Drive folder check configuration in database.
 
     If a folder with the same name already exists, it will be replaced.
 
@@ -71,20 +67,16 @@ def admin_add_google_drive_folder(
         Dict[str, Any]: Updated foldersToCheck list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
-    folder_dict = pydantic_model_to_dict(request)
+    DbConfig.add_google_drive_folder(
+        name=request.name,
+        folder_id=request.folderID,
+        description=request.description or "",
+        frequency_minutes=request.stateCheckFrequency_inMinutes or 1440
+    )
 
-    def _update(cfg: Dict[str, Any]) -> Dict[str, Any]:
-        google_drive = cfg.setdefault("googleDrive", {})
-        folders = ensure_list(google_drive.get("foldersToCheck"))
-        folders = [f for f in folders if isinstance(f, dict) and f.get("name") != folder_dict.get("name")]
-        folders.append(folder_dict)
-        google_drive["foldersToCheck"] = folders
-        return cfg
-
-    updated = ConfigFileManager.update_config(_update)
-    return {"foldersToCheck": updated.get("googleDrive", {}).get("foldersToCheck", [])}
+    return {"foldersToCheck": DbConfig.get_google_drive_folders()}
 
 
 @router.delete("/google-drive/folders")
@@ -96,7 +88,7 @@ def admin_remove_google_drive_folder(
         alias="X-Server-Authentication-Token",
     ),
 ) -> Dict[str, Any]:
-    """Remove a Google Drive folder check configuration by name.
+    """Remove a Google Drive folder check configuration from database.
 
     Also deletes any matching backup entry from the database to avoid stale alerts.
 
@@ -109,22 +101,18 @@ def admin_remove_google_drive_folder(
         Dict[str, Any]: Updated foldersToCheck list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     name = request.name
 
-    def _update(cfg: Dict[str, Any]) -> Dict[str, Any]:
-        google_drive = cfg.setdefault("googleDrive", {})
-        folders = ensure_list(google_drive.get("foldersToCheck"))
-        google_drive["foldersToCheck"] = [f for f in folders if not (isinstance(f, dict) and f.get("name") == name)]
-        return cfg
+    # Remove from config database
+    DbConfig.remove_google_drive_folder(name)
 
-    updated = ConfigFileManager.update_config(_update)
-
+    # Remove check results from database
     try:
         db = DatabaseWrapper.DatabaseWrapper()
         db.deleteBackupCheckByName(name)
     except Exception:
         pass
 
-    return {"foldersToCheck": updated.get("googleDrive", {}).get("foldersToCheck", [])}
+    return {"foldersToCheck": DbConfig.get_google_drive_folders()}

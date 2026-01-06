@@ -1,6 +1,10 @@
 # PYTHON.
 FROM python:3.13-slim
 
+# Build argument for image version (baked at build time)
+ARG IMAGE_TAG=dev
+ENV IMAGE_TAG=${IMAGE_TAG}
+
 # Install curl for health checks
 RUN apt-get update && apt-get install -y --no-install-recommends curl bash \
     && rm -rf /var/lib/apt/lists/*

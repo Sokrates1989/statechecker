@@ -90,6 +90,35 @@ def get_request_server_auth_token(
     )
 
 
+def require_admin_auth_readonly(
+    server_auth_token: Optional[str] = Query(default=None),
+    x_server_authentication_token: Optional[str] = Header(
+        default=None,
+        alias="X-Server-Authentication-Token",
+    ),
+) -> None:
+    """Validate admin access for read-only operations.
+
+    This only checks the authentication token without requiring file-based config.
+    Use this for GET endpoints that don't modify state.
+
+    Args:
+        server_auth_token (Optional[str]): Token provided as query parameter.
+        x_server_authentication_token (Optional[str]): Token provided as header.
+
+    Raises:
+        HTTPException: If token is missing or invalid.
+    """
+
+    token = get_request_server_auth_token(server_auth_token, x_server_authentication_token)
+
+    if configUtils.getServerAuthenticationToken() != token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid server authentication token",
+        )
+
+
 def require_admin_auth(
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
@@ -97,7 +126,10 @@ def require_admin_auth(
         alias="X-Server-Authentication-Token",
     ),
 ) -> None:
-    """Validate admin access for the request.
+    """Validate admin access for write operations.
+
+    This checks both the authentication token AND requires file-based config
+    to be available for persisting changes.
 
     Args:
         server_auth_token (Optional[str]): Token provided as query parameter.

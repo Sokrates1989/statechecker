@@ -43,6 +43,9 @@ import adminApiConfigRoutes as AdminApiConfigRoutes
 import adminApiGoogleDriveRoutes as AdminApiGoogleDriveRoutes
 import adminApiToolsRoutes as AdminApiToolsRoutes
 import adminApiWebsitesRoutes as AdminApiWebsitesRoutes
+import debug_logging as DebugLogging
+import startup as Startup
+import logger as Logger
 
 # StateCheckItem as pydantic model to use with fastAPI.
 # To unify usage, this model should be converted to StateCheckItem asap.
@@ -75,8 +78,24 @@ class BackupCheckItem_pydantic(BaseModel):
     mostRecentBackupFile_hash: str
 
 
-# Instantiate Fast API.
-app = FastAPI()
+# Initialize logger for startup
+api_logger = Logger.Logger("api")
+
+# Run startup initialization (migrations + seeding)
+Startup.initialize(api_logger)
+
+# Get image version from environment (set during Docker build)
+IMAGE_TAG = os.environ.get("IMAGE_TAG", "dev")
+
+# Instantiate Fast API with version info
+app = FastAPI(
+    title="Statechecker API",
+    description="API for the Statechecker monitoring system",
+    version=IMAGE_TAG,
+)
+
+# Setup debug logging middleware (only active when DEBUG_ENABLED=true).
+DebugLogging.setup_debug_logging(app)
 
 app.mount("/admin", StaticFiles(directory="website", html=True), name="admin")
 
@@ -93,8 +112,17 @@ async def root_get():
     Returns:
         dict: A hint to the client repository.
     """
-
     return {"message": "https://github.com/Sokrates1989/stateChecker-client"}
+
+
+@app.get("/version")
+async def get_version():
+    """Get API version information.
+
+    Returns:
+        dict: Version information including IMAGE_TAG.
+    """
+    return {"version": IMAGE_TAG, "title": "Statechecker API"}
 
 
 @app.get("/health")

@@ -9,15 +9,18 @@ Description:
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse, urlunparse
 
+import requests
 from fastapi import APIRouter, Body, Header, Query
 
-import configFileManager as ConfigFileManager
 import configUtils as ConfigUtils
+import database_config_manager as DbConfig
 import databaseWrapper as DatabaseWrapper
 import logger as Logger
 import telegramNotificationUtils
-from adminApiCommon import WebsiteRequest, dedupe_preserve_order, ensure_list, require_admin_auth
+import websiteStateAndMessageSentItem as WebsiteStateAndMessageSentItem
+from adminApiCommon import WebsiteRequest, require_admin_auth, require_admin_auth_readonly
 
 
 configUtils = ConfigUtils.ConfigUtils()
@@ -71,7 +74,7 @@ def admin_list_websites(
         Dict[str, Any]: Websites list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     urls = configUtils.getWebsitesToCheck() or []
     db = DatabaseWrapper.DatabaseWrapper()
@@ -104,7 +107,7 @@ def admin_add_website(
         alias="X-Server-Authentication-Token",
     ),
 ) -> Dict[str, Any]:
-    """Add a website URL to the persisted config.
+    """Add a website URL to the database.
 
     Args:
         request (WebsiteRequest): Website url.
@@ -115,17 +118,94 @@ def admin_add_website(
         Dict[str, Any]: Updated websitesToCheck list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     url = request.url
+    DbConfig.add_website(url)
 
-    def _update(cfg: Dict[str, Any]) -> Dict[str, Any]:
-        websites = cfg.setdefault("websites", {})
-        websites["websitesToCheck"] = dedupe_preserve_order(ensure_list(websites.get("websitesToCheck")) + [url])
-        return cfg
+    # Immediately check the website state
+    _check_website_state(url)
 
-    ConfigFileManager.update_config(_update)
     return {"websitesToCheck": configUtils.getWebsitesToCheck()}
+
+
+def _check_website_state(url: str) -> Dict[str, Any]:
+    """Check a website's state and update the database.
+
+    Args:
+        url (str): Website URL to check.
+
+    Returns:
+        Dict[str, Any]: Check result with state and status code.
+    """
+    db = DatabaseWrapper.DatabaseWrapper()
+
+    # Create entry if not exists
+    db.createNewWebsiteCheck(
+        WebsiteStateAndMessageSentItem.WebsiteStateAndMessageSentItem(url, "Up", False)
+    )
+
+    try:
+        urls_to_try = [url]
+        parsed = urlparse(url)
+        if parsed.hostname in ("localhost", "127.0.0.1") and parsed.scheme in ("http", "https"):
+            host = "host.docker.internal"
+            port = parsed.port
+            if port is None:
+                port = 443 if parsed.scheme == "https" else 80
+            urls_to_try.append(
+                urlunparse(parsed._replace(netloc=f"{host}:{port}"))
+            )
+
+        response = None
+        last_exc = None
+        for try_url in urls_to_try:
+            try:
+                response = requests.get(try_url, timeout=10, allow_redirects=True)
+                break
+            except Exception as exc:
+                last_exc = exc
+                response = None
+
+        if response is None:
+            raise last_exc if last_exc is not None else RuntimeError("request failed")
+
+        # Website is up if status code < 400
+        is_up = int(response.status_code) < 400
+        state = "Up" if is_up else "Down"
+
+        # Update database
+        db.updateWebsiteState(url, state)
+
+        return {"url": url, "state": state, "status_code": response.status_code}
+
+    except Exception as e:
+        # Website is down
+        db.updateWebsiteState(url, "Down")
+        return {"url": url, "state": "Down", "error": str(e)}
+
+
+@router.post("/websites/check")
+def admin_check_website(
+    request: WebsiteRequest,
+    server_auth_token: Optional[str] = Query(default=None),
+    x_server_authentication_token: Optional[str] = Header(
+        default=None,
+        alias="X-Server-Authentication-Token",
+    ),
+) -> Dict[str, Any]:
+    """Immediately check a website's state.
+
+    Args:
+        request (WebsiteRequest): Website url.
+        server_auth_token (Optional[str]): Token provided as query parameter.
+        x_server_authentication_token (Optional[str]): Token provided as header.
+
+    Returns:
+        Dict[str, Any]: Check result with state.
+    """
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    return _check_website_state(request.url)
 
 
 @router.delete("/websites")
@@ -137,7 +217,7 @@ def admin_remove_website(
         alias="X-Server-Authentication-Token",
     ),
 ) -> Dict[str, Any]:
-    """Remove a website URL from persisted config and delete DB entry.
+    """Remove a website URL from database and delete check entry.
 
     Args:
         request (WebsiteRequest): Website url.
@@ -148,17 +228,14 @@ def admin_remove_website(
         Dict[str, Any]: Updated websitesToCheck list.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     url = request.url
 
-    def _update(cfg: Dict[str, Any]) -> Dict[str, Any]:
-        websites = cfg.setdefault("websites", {})
-        websites["websitesToCheck"] = [item for item in ensure_list(websites.get("websitesToCheck")) if item != url]
-        return cfg
+    # Remove from config database
+    DbConfig.remove_website(url)
 
-    ConfigFileManager.update_config(_update)
-
+    # Remove check results from database
     try:
         db = DatabaseWrapper.DatabaseWrapper()
         db.deleteWebsiteCheckByName(url)

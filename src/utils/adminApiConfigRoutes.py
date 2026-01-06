@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Header, Query
 
 import configFileManager as ConfigFileManager
-from adminApiCommon import require_admin_auth
+from adminApiCommon import require_admin_auth, require_admin_auth_readonly
 
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
@@ -35,7 +35,7 @@ def admin_get_config(
         Dict[str, Any]: Admin-relevant config sections.
     """
 
-    require_admin_auth(server_auth_token, x_server_authentication_token)
+    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
 
     cfg_path = ConfigFileManager.resolve_config_file_path()
     cfg = ConfigFileManager.load_config(cfg_path)

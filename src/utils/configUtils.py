@@ -74,10 +74,23 @@ def _parse_statechecker_server_config(raw_config: str):
 class ConfigUtils:
     """
     Get any configuration settings.
+
+    Configuration is read from (in order of priority):
+    1. Environment variables
+    2. Database (for websites, google drive folders, frequency overrides)
+    3. Legacy STATECHECKER_SERVER_CONFIG (deprecated, for backward compatibility)
+    4. Legacy config.txt file (deprecated, for backward compatibility)
     """
-    # Constructor creating logfiles and paths.
+
     def __init__(self):
-          
+        """Initialize ConfigUtils.
+
+        Loads legacy config from file or environment variable for backward compatibility.
+        New deployments should use environment variables and database storage.
+        """
+        self._config_array = {}
+
+        # Try to load legacy config (for backward compatibility)
         try:
             config_file_pathAndName = str(ConfigFileManager.resolve_config_file_path())
             config_file = open(config_file_pathAndName)
@@ -87,13 +100,16 @@ class ConfigUtils:
             except Exception:
                 pass
         except:
-            # Get config array from Environment Variable.
+            # Get config array from Environment Variable (legacy).
             statechecker_server_config = os.getenv("STATECHECKER_SERVER_CONFIG")
             if statechecker_server_config:
-                self._config_array = _parse_statechecker_server_config(statechecker_server_config)
+                try:
+                    self._config_array = _parse_statechecker_server_config(statechecker_server_config)
+                except Exception:
+                    self._config_array = {}
             else:
-                # If neither the file nor the environment variable is found, raise an error or handle it appropriately
-                raise ValueError("configUtils: Could not get config array from config.txt nor environment variable STATECHECKER_SERVER_CONFIG")
+                # No legacy config found - this is fine for new deployments
+                self._config_array = {}
 
 
     def getConfigArray(self):
@@ -125,26 +141,42 @@ class ConfigUtils:
     
 
     def getWebsitesToCheck(self):
-        """
-        Get websites to check.
+        """Get websites to check.
+
+        Priority:
+        1. Database (config_websites table)
+        2. Environment variable WEBSITES_TO_CHECK (comma-separated)
+        3. Legacy config file/STATECHECKER_SERVER_CONFIG
 
         Returns:
-            (array): Websites to check.
+            list: Websites to check.
         """
-        websites_to_check=os.getenv("WEBSITES_TO_CHECK")
+        # Try database first
+        try:
+            import database_config_manager as DbConfig
+            db_websites = DbConfig.get_websites_to_check()
+            if db_websites:
+                return db_websites
+        except Exception:
+            pass
+
+        # Try environment variable
+        websites_to_check = os.getenv("WEBSITES_TO_CHECK")
         if websites_to_check:
-            websites_to_check = [item.strip() for item in websites_to_check.strip().strip("\"").split(',')]
-        else:
-            config_source = self._config_array
-            if ConfigFileManager.is_file_based_config_available():
-                try:
-                    config_source = ConfigFileManager.load_config()
-                except Exception:
-                    config_source = self._config_array
-            if "websites" in config_source:
-                if "websitesToCheck" in config_source["websites"]:
-                    websites_to_check = config_source["websites"]["websitesToCheck"]
-        return websites_to_check
+            return [item.strip() for item in websites_to_check.strip().strip("\"").split(',') if item.strip()]
+
+        # Fallback to legacy config
+        config_source = self._config_array
+        if ConfigFileManager.is_file_based_config_available():
+            try:
+                config_source = ConfigFileManager.load_config()
+            except Exception:
+                config_source = self._config_array
+        if "websites" in config_source:
+            if "websitesToCheck" in config_source["websites"]:
+                return config_source["websites"]["websitesToCheck"]
+
+        return []
 
 
     def getIgnoredToolsUsingApi(self):
@@ -175,14 +207,23 @@ class ConfigUtils:
     def getToolsUsingApiFrequencyOverrides(self):
         """Get frequency overrides for API tools.
 
-        The override map is stored in config.txt under `toolsUsingApi_frequencyOverrides`.
-        If present, the server will enforce the configured frequency even if
-        clients send a different one.
+        Priority:
+        1. Database (config_settings table)
+        2. Legacy config file/STATECHECKER_SERVER_CONFIG
 
         Returns:
             dict: Mapping {tool_name: frequency_in_minutes}.
         """
+        # Try database first
+        try:
+            import database_config_manager as DbConfig
+            db_overrides = DbConfig.get_tool_frequency_overrides()
+            if db_overrides:
+                return db_overrides
+        except Exception:
+            pass
 
+        # Fallback to legacy config
         config_source = self._config_array
         if ConfigFileManager.is_file_based_config_available():
             try:
@@ -197,12 +238,23 @@ class ConfigUtils:
     def getBackupFrequencyOverrides(self):
         """Get frequency overrides for backups.
 
-        The override map is stored in config.txt under `backupFrequencyOverrides`.
+        Priority:
+        1. Database (config_settings table)
+        2. Legacy config file/STATECHECKER_SERVER_CONFIG
 
         Returns:
             dict: Mapping {backup_name: frequency_in_minutes}.
         """
+        # Try database first
+        try:
+            import database_config_manager as DbConfig
+            db_overrides = DbConfig.get_backup_frequency_overrides()
+            if db_overrides:
+                return db_overrides
+        except Exception:
+            pass
 
+        # Fallback to legacy config
         config_source = self._config_array
         if ConfigFileManager.is_file_based_config_available():
             try:
@@ -727,9 +779,23 @@ class ConfigUtils:
     def getGoogleDriveFoldersToCheck(self):
         """Get google drive folders to check.
 
+        Priority:
+        1. Database (config_google_drive_folders table)
+        2. Legacy config file/STATECHECKER_SERVER_CONFIG
+
         Returns:
-            (array): Google drive folders to check.
+            list: Google drive folders to check.
         """
+        # Try database first
+        try:
+            import database_config_manager as DbConfig
+            db_folders = DbConfig.get_google_drive_folders()
+            if db_folders:
+                return db_folders
+        except Exception:
+            pass
+
+        # Fallback to legacy config
         config_source = self._config_array
         if ConfigFileManager.is_file_based_config_available():
             try:
