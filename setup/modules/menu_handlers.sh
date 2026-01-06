@@ -62,9 +62,9 @@ handle_build_web_image() {
     echo "Target platform: $target_platform"
 
     if docker buildx version >/dev/null 2>&1; then
-        docker buildx build --platform "$target_platform" -t "$full_image" -f Dockerfile_web --load .
+        docker buildx build --platform "$target_platform" -t "$full_image" -f Dockerfile_web --build-arg "WEB_IMAGE_TAG=$image_version" --load .
     else
-        docker build -t "$full_image" -f Dockerfile_web .
+        docker build -t "$full_image" -f Dockerfile_web --build-arg "WEB_IMAGE_TAG=$image_version" .
     fi
 
     echo "📤 Pushing image to registry..."

@@ -483,6 +483,12 @@ function escapeHtml(s) {
  * Wire up UI events.
  */
 function wireUi() {
+  $('token').addEventListener('keydown', async (e) => {
+    if (e.key === 'Enter') {
+      await saveSettings();
+    }
+  });
+
   $('btnSave').addEventListener('click', async () => {
     await saveSettings();
   });

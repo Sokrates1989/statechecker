@@ -71,9 +71,9 @@ function Build-WebsiteImage {
     Write-Host "Target platform: $TargetPlatform" -ForegroundColor Gray
 
     if ($useBuildx) {
-        docker buildx build --platform $TargetPlatform -t $FULL_IMAGE -f Dockerfile_web --load .
+        docker buildx build --platform $TargetPlatform -t $FULL_IMAGE -f Dockerfile_web --build-arg "WEB_IMAGE_TAG=$IMAGE_VERSION" --load .
     } else {
-        docker build -t $FULL_IMAGE -f Dockerfile_web .
+        docker build -t $FULL_IMAGE -f Dockerfile_web --build-arg "WEB_IMAGE_TAG=$IMAGE_VERSION" .
     }
 
     if ($LASTEXITCODE -ne 0) {
