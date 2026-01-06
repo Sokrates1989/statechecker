@@ -1,6 +1,12 @@
 server {
     listen 80;
 
+    # Docker embedded DNS. Using an nginx variable in proxy_pass defers DNS
+    # resolution to request time so nginx doesn't crash on startup if the
+    # upstream service isn't resolvable yet.
+    resolver 127.0.0.11 ipv6=off valid=10s;
+    set $api_upstream ${API_UPSTREAM};
+
     root /usr/share/nginx/html;
     index index.html;
 
@@ -13,7 +19,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://${API_UPSTREAM};
+        proxy_pass http://$api_upstream;
     }
 
     location /docs {
@@ -21,7 +27,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://${API_UPSTREAM};
+        proxy_pass http://$api_upstream;
     }
 
     location /openapi.json {
@@ -29,7 +35,7 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://${API_UPSTREAM};
+        proxy_pass http://$api_upstream;
     }
 
     location /health {
@@ -37,6 +43,6 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_pass http://${API_UPSTREAM};
+        proxy_pass http://$api_upstream;
     }
 }

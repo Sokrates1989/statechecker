@@ -71,6 +71,14 @@ handle_build_web_image() {
     docker push "$full_image"
     echo "✅ Image pushed: $full_image"
 
+    if [ "$image_version" != "latest" ]; then
+        echo ""
+        echo "📤 Tagging and pushing ${image_name}:latest..."
+        docker tag "$full_image" "${image_name}:latest"
+        docker push "${image_name}:latest"
+        echo "✅ Also pushed: ${image_name}:latest"
+    fi
+
     if [ -f .env ]; then
         if grep -q '^WEB_IMAGE_NAME=' .env; then
             tmp_env="$(mktemp)" || return 1

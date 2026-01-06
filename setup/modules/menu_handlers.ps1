@@ -89,6 +89,16 @@ function Build-WebsiteImage {
     }
     Write-Host "[OK] Image pushed: $FULL_IMAGE" -ForegroundColor Green
 
+    if ($IMAGE_VERSION -ne "latest") {
+        docker tag $FULL_IMAGE "${IMAGE_NAME}:latest"
+        docker push "${IMAGE_NAME}:latest"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERROR] Failed to push ${IMAGE_NAME}:latest" -ForegroundColor Red
+            return
+        }
+        Write-Host "[OK] Also pushed: ${IMAGE_NAME}:latest" -ForegroundColor Green
+    }
+
     if (Test-Path .env) {
         $envLines = Get-Content .env -ErrorAction SilentlyContinue
 

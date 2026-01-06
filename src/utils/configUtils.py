@@ -22,6 +22,55 @@ import ast
 import configFileManager as ConfigFileManager
 
 
+def _parse_statechecker_server_config(raw_config: str):
+    """Parse `STATECHECKER_SERVER_CONFIG` from environment.
+
+    This deployment supports both file-based config (`config.txt`) and an env
+    override (`STATECHECKER_SERVER_CONFIG`). In practice, `.env` / Compose / Swarm
+    layers may introduce extra quoting or escaping.
+
+    Args:
+        raw_config (str): Raw environment value.
+
+    Returns:
+        (dict|list): Parsed config object.
+
+    Raises:
+        ValueError: If parsing fails.
+    """
+
+    if raw_config is None:
+        raise ValueError("STATECHECKER_SERVER_CONFIG is not set")
+
+    raw = str(raw_config).strip()
+    if not raw:
+        raise ValueError("STATECHECKER_SERVER_CONFIG is empty")
+
+    candidates = [raw]
+
+    # Common: value accidentally wrapped in single quotes.
+    candidates.append(raw.strip("\""))
+    candidates.append(raw.strip("'"))
+
+    # Common: value is double-escaped from dotenv (e.g. {\"a\":1}).
+    candidates.append(raw.replace('\\"', '"'))
+    candidates.append(raw.replace('\\\"', '"'))
+
+    # Try JSON first.
+    for candidate in candidates:
+        try:
+            parsed = json.loads(candidate)
+            return parsed
+        except Exception:
+            pass
+
+    # Fallback: some legacy deployments may provide a Python-literal dict.
+    try:
+        return ast.literal_eval(raw)
+    except Exception as exc:
+        raise ValueError(f"Could not parse STATECHECKER_SERVER_CONFIG: {exc}") from exc
+
+
 class ConfigUtils:
     """
     Get any configuration settings.
@@ -41,7 +90,7 @@ class ConfigUtils:
             # Get config array from Environment Variable.
             statechecker_server_config = os.getenv("STATECHECKER_SERVER_CONFIG")
             if statechecker_server_config:
-                self._config_array = json.loads(statechecker_server_config)
+                self._config_array = _parse_statechecker_server_config(statechecker_server_config)
             else:
                 # If neither the file nor the environment variable is found, raise an error or handle it appropriately
                 raise ValueError("configUtils: Could not get config array from config.txt nor environment variable STATECHECKER_SERVER_CONFIG")
@@ -728,8 +777,14 @@ class ConfigUtils:
                 raw = googleDriveServiceAccountJson_file.read().strip()
                 if not raw or raw.lower() == "none":
                     return None
-                googleDriveServiceAccountJson_dict = ast.literal_eval(raw)
-                return ServiceAccountCredentials.from_json_keyfile_dict(googleDriveServiceAccountJson_dict, scope)
+                try:
+                    googleDriveServiceAccountJson_dict = json.loads(raw)
+                except Exception:
+                    googleDriveServiceAccountJson_dict = ast.literal_eval(raw)
+                return ServiceAccountCredentials.from_json_keyfile_dict(
+                    googleDriveServiceAccountJson_dict,
+                    scope,
+                )
         except Exception:
             return None
 

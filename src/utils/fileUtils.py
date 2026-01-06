@@ -7,6 +7,12 @@ import os
 import re
 
 def createFileIfNotExists(fileToCreateIfNotExists):
+	"""
+	Creates a file and its parent directories if they do not exist.
+
+	Args:
+		fileToCreateIfNotExists (str): Absolute or relative path to the file.
+	"""
 	# Seperate directory from filename.
 	if "/" in fileToCreateIfNotExists:
 		lastSlashPosition = fileToCreateIfNotExists.rfind("/")
@@ -23,10 +29,19 @@ def createFileIfNotExists(fileToCreateIfNotExists):
 		print("Cannot create a file without directory (pass filename containing filepath like \"path/to/file.txt\")")
 
 
-
 # Get a valid filename for a string.
 def getValidFileNameForString(stringToConvertToFileName, fileType):
-	whiteListedCharactersRegEx = "[^a-zA-Z0-9.\-_]"
+	"""
+	Converts a string into a valid filename by removing non-alphanumeric characters.
+
+	Args:
+		stringToConvertToFileName (str): The string to convert.
+		fileType (str): The file extension to append.
+
+	Returns:
+		str: A sanitized filename.
+	"""
+	whiteListedCharactersRegEx = r"[^a-zA-Z0-9.\-_]"
 	validFilename = re.sub(whiteListedCharactersRegEx, '', str(stringToConvertToFileName) )
 	validFilename = validFilename[:100]
 	validFilename += "." + str(fileType)
@@ -35,6 +50,15 @@ def getValidFileNameForString(stringToConvertToFileName, fileType):
 
 # Read string from file.
 def readStringFromFile(fileToReadStringFrom):
+	"""
+	Reads the entire content of a file as a string.
+
+	Args:
+		fileToReadStringFrom (str): Path to the file.
+
+	Returns:
+		str: The file content.
+	"""
 	string = ""
 	with open(fileToReadStringFrom, 'r') as file:
 		string = file.read().rstrip()
@@ -44,5 +68,12 @@ def readStringFromFile(fileToReadStringFrom):
 # Overwrite string of file.
 # !!! Completely removes previous content !!!
 def overwriteContentOfFile(fileToEdit, newString):
+	"""
+	Overwrites the content of a file with a new string.
+
+	Args:
+		fileToEdit (str): Path to the file.
+		newString (str): The new content.
+	"""
 	with open(fileToEdit,'w') as f:
 		f.write(str(newString))
