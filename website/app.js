@@ -146,6 +146,13 @@ async function apiCall(endpoint, method = 'GET', body = null) {
 
     if (!response.ok) {
         const text = await response.text().catch(() => '');
+        
+        // Handle 403 Forbidden - user lacks required role
+        if (response.status === 403) {
+            const errorMsg = 'Access denied. You need admin privileges to perform this action.';
+            throw new Error(errorMsg);
+        }
+        
         throw new Error(`${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
     }
 

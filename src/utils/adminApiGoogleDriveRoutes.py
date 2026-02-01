@@ -16,7 +16,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 import database_config_manager as DbConfig
 import databaseWrapper as DatabaseWrapper
-from adminApiCommon import GoogleDriveFolderRequest, NameRequest, require_admin_auth_hybrid
+from adminApiCommon import GoogleDriveFolderRequest, NameRequest, require_read_access, require_write_access
 from adminApiCommon import bearer_scheme
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
@@ -44,7 +44,7 @@ async def admin_list_google_drive_folders(
         Dict[str, Any]: Folder checks.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_read_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     folders = DbConfig.get_google_drive_folders()
     return {"foldersToCheck": folders}
@@ -74,7 +74,7 @@ async def admin_add_google_drive_folder(
         Dict[str, Any]: Updated foldersToCheck list.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_write_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     DbConfig.add_google_drive_folder(
         name=body.name,
@@ -110,7 +110,7 @@ async def admin_remove_google_drive_folder(
         Dict[str, Any]: Updated foldersToCheck list.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_write_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     name = body.name
 

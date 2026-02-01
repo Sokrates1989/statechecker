@@ -25,7 +25,7 @@ import database_config_manager as DbConfig
 import databaseWrapper as DatabaseWrapper
 import logger as Logger
 import telegramNotificationUtils
-from adminApiCommon import NameRequest, require_admin_auth_hybrid, bearer_scheme
+from adminApiCommon import NameRequest, require_read_access, require_write_access, bearer_scheme
 
 
 configUtils = ConfigUtils.ConfigUtils()
@@ -90,7 +90,7 @@ async def admin_list_backups(
         Dict[str, Any]: Backups list.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_read_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     overrides = configUtils.getBackupFrequencyOverrides()
     db = DatabaseWrapper.DatabaseWrapper()
@@ -138,7 +138,7 @@ async def admin_delete_backup(
         Dict[str, Any]: Updated ignore list.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_write_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     name = body.name
 
@@ -184,7 +184,7 @@ async def admin_set_backup_frequency(
         Dict[str, Any]: The updated overrides mapping.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_write_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     # Store override in database
     DbConfig.set_backup_frequency_override(body.name, int(body.stateCheckFrequency_inMinutes))

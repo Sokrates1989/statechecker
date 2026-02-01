@@ -205,6 +205,108 @@ async def require_admin_auth_hybrid(
     )
 
 
+# Role constants
+ROLE_ADMIN = "statechecker:admin"
+ROLE_READ = "statechecker:read"
+
+
+def _check_user_has_role(user: Optional[KeycloakUser], required_roles: List[str]) -> bool:
+    """Check if user has any of the required roles.
+
+    Args:
+        user: KeycloakUser or None (token auth).
+        required_roles: List of role names that grant access.
+
+    Returns:
+        True if user has access (token auth or has required role).
+    """
+    # Token auth (stateChecker-client) has full access
+    if user is None:
+        return True
+
+    # Check if user has any of the required roles
+    if KEYCLOAK_AVAILABLE and KeycloakUser is not None:
+        return user.has_any_role(required_roles)
+
+    return False
+
+
+async def require_read_access(
+    request: Request,
+    server_auth_token: Optional[str] = Query(default=None),
+    x_server_authentication_token: Optional[str] = Header(
+        default=None,
+        alias="X-Server-Authentication-Token",
+    ),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+) -> Optional[KeycloakUser]:
+    """Validate read access - requires statechecker:read OR statechecker:admin role.
+
+    This is for GET endpoints that only read data.
+
+    Args:
+        request: FastAPI request object.
+        server_auth_token: Token from query param.
+        x_server_authentication_token: Token from header.
+        credentials: Bearer token credentials.
+
+    Returns:
+        KeycloakUser if authenticated via Keycloak, None if via token.
+
+    Raises:
+        HTTPException: If no valid auth or insufficient permissions.
+    """
+    user = await require_admin_auth_hybrid(
+        request, server_auth_token, x_server_authentication_token, credentials
+    )
+
+    if not _check_user_has_role(user, [ROLE_ADMIN, ROLE_READ]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied. Required role: {ROLE_READ} or {ROLE_ADMIN}.",
+        )
+
+    return user
+
+
+async def require_write_access(
+    request: Request,
+    server_auth_token: Optional[str] = Query(default=None),
+    x_server_authentication_token: Optional[str] = Header(
+        default=None,
+        alias="X-Server-Authentication-Token",
+    ),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+) -> Optional[KeycloakUser]:
+    """Validate write access - requires statechecker:admin role ONLY.
+
+    This is for POST/PUT/DELETE endpoints that modify data.
+
+    Args:
+        request: FastAPI request object.
+        server_auth_token: Token from query param.
+        x_server_authentication_token: Token from header.
+        credentials: Bearer token credentials.
+
+    Returns:
+        KeycloakUser if authenticated via Keycloak, None if via token.
+
+    Raises:
+        HTTPException: If no valid auth or insufficient permissions.
+    """
+    user = await require_admin_auth_hybrid(
+        request, server_auth_token, x_server_authentication_token, credentials
+    )
+
+    if not _check_user_has_role(user, [ROLE_ADMIN]):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied. Required role: {ROLE_ADMIN}. Write operations require admin privileges.",
+        )
+
+    return user
+
+
 def require_admin_auth_readonly(
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(

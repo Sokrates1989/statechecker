@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
 import configFileManager as ConfigFileManager
-from adminApiCommon import require_admin_auth_hybrid, bearer_scheme
+from adminApiCommon import require_read_access, bearer_scheme
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
@@ -39,7 +39,7 @@ async def admin_get_config(
         Dict[str, Any]: Admin-relevant config sections.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_read_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     cfg_path = ConfigFileManager.resolve_config_file_path()
     cfg = ConfigFileManager.load_config(cfg_path)

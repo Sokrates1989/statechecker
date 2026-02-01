@@ -21,7 +21,7 @@ import databaseWrapper as DatabaseWrapper
 import logger as Logger
 import telegramNotificationUtils
 import websiteStateAndMessageSentItem as WebsiteStateAndMessageSentItem
-from adminApiCommon import WebsiteRequest, require_admin_auth_hybrid, bearer_scheme
+from adminApiCommon import WebsiteRequest, require_read_access, require_write_access, bearer_scheme
 
 
 configUtils = ConfigUtils.ConfigUtils()
@@ -79,7 +79,7 @@ async def admin_list_websites(
         Dict[str, Any]: Websites list.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_read_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     urls = configUtils.getWebsitesToCheck() or []
     db = DatabaseWrapper.DatabaseWrapper()
@@ -127,7 +127,7 @@ async def admin_add_website(
         Dict[str, Any]: Updated websitesToCheck list.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_write_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     url = body.url
     DbConfig.add_website(url)
@@ -217,7 +217,7 @@ async def admin_check_website(
     Returns:
         Dict[str, Any]: Check result with state.
     """
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_read_access(request, server_auth_token, x_server_authentication_token, credentials)
     return _check_website_state(body.url)
 
 
@@ -245,7 +245,7 @@ async def admin_remove_website(
         Dict[str, Any]: Updated websitesToCheck list.
     """
 
-    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    await require_write_access(request, server_auth_token, x_server_authentication_token, credentials)
 
     url = body.url
 
