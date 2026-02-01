@@ -77,8 +77,7 @@ function Show-MainMenu {
     $MENU_MAINT_DOWN = $menuNext; $menuNext++
     $MENU_MAINT_DB_REINSTALL = $menuNext; $menuNext++
 
-    $MENU_BUILD_IMAGE = $menuNext; $menuNext++
-    $MENU_BUILD_WEB_IMAGE = $menuNext; $menuNext++
+    $MENU_BUILD_ALL_IMAGES = $menuNext; $menuNext++
 
     $MENU_KEYCLOAK_BOOTSTRAP = $menuNext; $menuNext++
 
@@ -99,8 +98,7 @@ function Show-MainMenu {
     Write-Host "  $MENU_MAINT_DB_REINSTALL) DB Re-Install (reset database volume)" -ForegroundColor Gray
     Write-Host "" 
     Write-Host "Build:" -ForegroundColor Yellow
-    Write-Host "  $MENU_BUILD_IMAGE) Build Production Docker Image" -ForegroundColor Gray
-    Write-Host "  $MENU_BUILD_WEB_IMAGE) Build Website Docker Image (nginx)" -ForegroundColor Gray
+    Write-Host "  $MENU_BUILD_ALL_IMAGES) Build All Docker Images (API + Web)" -ForegroundColor Gray
     Write-Host "" 
     Write-Host "Keycloak:" -ForegroundColor Yellow
     Write-Host "  $MENU_KEYCLOAK_BOOTSTRAP) Bootstrap Keycloak (realm/clients/users)" -ForegroundColor Gray
@@ -126,13 +124,9 @@ function Show-MainMenu {
             Invoke-DockerComposeDown -ComposeFile $ComposeFile
             $summary = "Docker Compose Down executed"
         }
-        "$MENU_BUILD_IMAGE" {
-            Build-ProductionImage
-            $summary = "Image build executed"
-        }
-        "$MENU_BUILD_WEB_IMAGE" {
-            Build-WebsiteImage
-            $summary = "Website image build executed"
+        "$MENU_BUILD_ALL_IMAGES" {
+            Build-AllImages
+            $summary = "All images build executed"
         }
         "$MENU_MAINT_DB_REINSTALL" {
             Invoke-DbReinstall -ComposeFile $ComposeFile
