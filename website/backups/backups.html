@@ -1,0 +1,35 @@
+<!-- Backups Tab -->
+<div id="backups-tab" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>💾 Watched Backups</h2>
+            <button id="backups-refresh-btn" class="btn btn-primary btn-sm">↻ Refresh</button>
+        </div>
+        <p class="hint">Backup jobs monitored via /v1/backupcheck pings from clients</p>
+        <div id="backups-list" class="items-list">
+            <p class="loading">Loading backups...</p>
+        </div>
+    </div>
+
+    <!-- Set Frequency Modal -->
+    <div id="backup-frequency-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="backup-frequency-modal-title">Set Check Frequency</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="backup-frequency-target-name">
+                <div class="form-group">
+                    <label for="backup-frequency-input">Frequency</label>
+                    <input type="text" id="backup-frequency-input" placeholder="e.g., 60, 2h, 1d">
+                    <p class="hint">Enter value in minutes (60), or with suffix: m=minutes, h=hours, d=days</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="backup-frequency-save-btn" class="btn btn-primary">Save</button>
+                <button class="btn btn-secondary modal-close">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>

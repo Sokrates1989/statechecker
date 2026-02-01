@@ -219,8 +219,7 @@ function Show-RelevantPagesDelayed {
     $phpPort = Get-EnvVariable -VariableName "PHPMYADMIN_PORT" -EnvFile ".env" -DefaultValue "8080"
     $webPort = Get-EnvVariable -VariableName "WEB_PORT" -EnvFile ".env" -DefaultValue "8788"
 
-    $apiUrl = "http://localhost:$apiPort/admin"
-    $apiDocsUrl = "http://localhost:$apiPort/docs"
+    $apiUrl = "http://localhost:$apiPort"
     $apiHealthUrl = "http://localhost:$apiPort/health"
     $phpMyAdminUrl = "http://localhost:$phpPort"
     $webUrl = "http://localhost:$webPort"
@@ -228,8 +227,7 @@ function Show-RelevantPagesDelayed {
     Write-Host "" 
     Write-Host "========================================" -ForegroundColor Yellow
     Write-Host "  Services will be accessible at:" -ForegroundColor Yellow
-    Write-Host "  - Admin UI: $apiUrl" -ForegroundColor Gray
-    Write-Host "  - API Docs: $apiDocsUrl" -ForegroundColor Gray
+    Write-Host "  - API: $apiUrl" -ForegroundColor Gray
     Write-Host "  - Web: $webUrl" -ForegroundColor Gray
     Write-Host "  - phpMyAdmin: $phpMyAdminUrl" -ForegroundColor Gray
     Write-Host "========================================" -ForegroundColor Yellow
@@ -262,7 +260,6 @@ if (`$apiReady) {
 Write-Host 'Opening browsers...' -ForegroundColor Green
 Start-Sleep -Seconds 1
 Open-Url '$apiUrl'
-Open-Url '$apiDocsUrl'
 Open-Url '$webUrl'
 Open-Url '$phpMyAdminUrl'
 

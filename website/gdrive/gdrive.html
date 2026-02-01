@@ -1,0 +1,47 @@
+<!-- Google Drive Tab -->
+<div id="gdrive-tab" class="tab-content">
+    <!-- Add/Edit Folder Form -->
+    <div id="gdrive-form" class="card">
+        <div class="form-header">
+            <h2>➕ Add/Update Google Drive Folder</h2>
+        </div>
+        <p class="hint">Configure folders to monitor for backup file freshness via Google Drive API</p>
+        <div class="form-group">
+            <label for="gdrive-folder-json">Folder Configuration (JSON)</label>
+            <textarea id="gdrive-folder-json" class="mono" rows="6" spellcheck="false" placeholder='{
+  "name": "My Backup Folder",
+  "description": "Daily DB backups",
+  "folderID": "abc123...",
+  "token": "google-oauth-token...",
+  "stateCheckFrequency_inMinutes": 1440
+}'></textarea>
+        </div>
+        <div class="form-actions">
+            <button id="gdrive-upsert-btn" class="btn btn-primary">Add / Update Folder</button>
+        </div>
+    </div>
+
+    <!-- Remove Folder -->
+    <div class="card">
+        <div class="form-header">
+            <h2>🗑️ Remove Folder</h2>
+        </div>
+        <div class="form-group">
+            <label for="gdrive-remove-name">Folder Name</label>
+            <input type="text" id="gdrive-remove-name" placeholder="Enter folder name to remove">
+        </div>
+        <div class="form-actions">
+            <button id="gdrive-remove-btn" class="btn btn-danger">Remove Folder</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>📁 Configured Folders</h2>
+            <button id="gdrive-refresh-btn" class="btn btn-primary btn-sm">↻ Refresh</button>
+        </div>
+        <div id="gdrive-list">
+            <p class="loading">Loading folders...</p>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,28 @@
+<!-- Websites Tab -->
+<div id="websites-tab" class="tab-content">
+    <!-- Add Website Form -->
+    <div id="website-form" class="card">
+        <div class="form-header">
+            <h2>➕ Add Website</h2>
+        </div>
+        <div class="form-group">
+            <label for="website-url-input">Website URL</label>
+            <input type="text" id="website-url-input" placeholder="e.g., example.com or https://example.com/health">
+            <p class="hint">Enter a domain (both http/https will be added) or a full URL</p>
+        </div>
+        <div class="form-actions">
+            <button id="website-add-btn" class="btn btn-primary">Add Website</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>🌐 Watched Websites</h2>
+            <button id="websites-refresh-btn" class="btn btn-primary btn-sm">↻ Refresh</button>
+        </div>
+        <p class="hint">Websites monitored for uptime via HTTP checks</p>
+        <div id="websites-list" class="items-list">
+            <p class="loading">Loading websites...</p>
+        </div>
+    </div>
+</div>

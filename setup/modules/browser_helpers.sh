@@ -134,8 +134,7 @@ show_relevant_pages_delayed() {
         web_port="$(read_env_variable WEB_PORT .env 8788)"
     fi
 
-    local api_url="http://localhost:${api_port}/admin"
-    local api_docs_url="http://localhost:${api_port}/docs"
+    local api_url="http://localhost:${api_port}"
     local api_health_url="http://localhost:${api_port}/health"
     local php_url="http://localhost:${php_port}"
     local web_url="http://localhost:${web_port}"
@@ -143,8 +142,7 @@ show_relevant_pages_delayed() {
     echo ""
     echo "========================================"
     echo "  Services will be accessible at:"
-    echo "  - Admin UI: $api_url"
-    echo "  - API Docs: $api_docs_url"
+    echo "  - API: $api_url"
     echo "  - Web: $web_url"
     echo "  - phpMyAdmin: $php_url"
     echo "========================================"
@@ -161,7 +159,6 @@ show_relevant_pages_delayed() {
         
         sleep 1
         open_url "$api_url"
-        open_url "$api_docs_url"
         open_url "$web_url"
         open_url "$php_url"
     ) &

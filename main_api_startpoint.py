@@ -14,7 +14,6 @@ Description:
 from typing import Union
 
 from fastapi import FastAPI, Response, status
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 # Import own classes.
@@ -96,8 +95,6 @@ app = FastAPI(
 
 # Setup debug logging middleware (only active when DEBUG_ENABLED=true).
 DebugLogging.setup_debug_logging(app)
-
-app.mount("/admin", StaticFiles(directory="website", html=True), name="admin")
 
 app.include_router(AdminApiConfigRoutes.router)
 app.include_router(AdminApiToolsRoutes.router)

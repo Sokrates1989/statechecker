@@ -1,0 +1,35 @@
+<!-- Tools Tab -->
+<div id="tools-tab" class="tab-content active">
+    <div class="card">
+        <div class="card-header">
+            <h2>🔧 Watched Tools</h2>
+            <button id="tools-refresh-btn" class="btn btn-primary btn-sm">↻ Refresh</button>
+        </div>
+        <p class="hint">Tools monitored via /v1/statecheck pings from clients</p>
+        <div id="tools-list" class="items-list">
+            <p class="loading">Loading tools...</p>
+        </div>
+    </div>
+
+    <!-- Set Frequency Modal -->
+    <div id="tool-frequency-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="tool-frequency-modal-title">Set Check Frequency</h3>
+                <button class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="tool-frequency-target-name">
+                <div class="form-group">
+                    <label for="tool-frequency-input">Frequency</label>
+                    <input type="text" id="tool-frequency-input" placeholder="e.g., 5, 30m, 2h, 1d">
+                    <p class="hint">Enter value in minutes (5), or with suffix: m=minutes, h=hours, d=days</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="tool-frequency-save-btn" class="btn btn-primary">Save</button>
+                <button class="btn btn-secondary modal-close">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>

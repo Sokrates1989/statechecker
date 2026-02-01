@@ -12,7 +12,8 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
 import requests
-from fastapi import APIRouter, Body, Header, Query
+from fastapi import APIRouter, Body, Depends, Header, Query, Request
+from fastapi.security import HTTPAuthorizationCredentials
 
 import configUtils as ConfigUtils
 import database_config_manager as DbConfig
@@ -20,7 +21,7 @@ import databaseWrapper as DatabaseWrapper
 import logger as Logger
 import telegramNotificationUtils
 import websiteStateAndMessageSentItem as WebsiteStateAndMessageSentItem
-from adminApiCommon import WebsiteRequest, require_admin_auth, require_admin_auth_readonly
+from adminApiCommon import WebsiteRequest, require_admin_auth_hybrid, bearer_scheme
 
 
 configUtils = ConfigUtils.ConfigUtils()
@@ -57,24 +58,28 @@ def _notify_website_unwatched(url: str) -> None:
 
 
 @router.get("/websites")
-def admin_list_websites(
+async def admin_list_websites(
+    request: Request,
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
     """List configured websites and include last known DB state if available.
 
     Args:
+        request: FastAPI request object.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Websites list.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
     urls = configUtils.getWebsitesToCheck() or []
     db = DatabaseWrapper.DatabaseWrapper()
@@ -99,28 +104,32 @@ def admin_list_websites(
 
 
 @router.post("/websites")
-def admin_add_website(
-    request: WebsiteRequest,
+async def admin_add_website(
+    request: Request,
+    body: WebsiteRequest,
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
-    """Add a website URL to the database.
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
+    """Add a website to the websitesToCheck list.
 
     Args:
-        request (WebsiteRequest): Website url.
+        request: FastAPI request object.
+        body (WebsiteRequest): Website url.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Updated websitesToCheck list.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
-    url = request.url
+    url = body.url
     DbConfig.add_website(url)
 
     # Immediately check the website state
@@ -186,51 +195,59 @@ def _check_website_state(url: str) -> Dict[str, Any]:
 
 
 @router.post("/websites/check")
-def admin_check_website(
-    request: WebsiteRequest,
+async def admin_check_website(
+    request: Request,
+    body: WebsiteRequest,
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
-    """Immediately check a website's state.
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
+    """Check a website's current state.
 
     Args:
-        request (WebsiteRequest): Website url.
+        request: FastAPI request object.
+        body (WebsiteRequest): Website url.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Check result with state.
     """
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
-    return _check_website_state(request.url)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
+    return _check_website_state(body.url)
 
 
 @router.delete("/websites")
-def admin_remove_website(
-    request: WebsiteRequest = Body(...),
+async def admin_remove_website(
+    request: Request,
+    body: WebsiteRequest = Body(...),
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
-    """Remove a website URL from database and delete check entry.
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
+    """Remove a website from the websitesToCheck list.
 
     Args:
-        request (WebsiteRequest): Website url.
+        request: FastAPI request object.
+        body (WebsiteRequest): Website url.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Updated websitesToCheck list.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
-    url = request.url
+    url = body.url
 
     # Remove from config database
     DbConfig.remove_website(url)

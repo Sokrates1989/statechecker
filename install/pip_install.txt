@@ -7,3 +7,5 @@ google-auth-httplib2
 google-auth-oauthlib
 oauth2client
 pytz
+PyJWT[crypto]
+httpx

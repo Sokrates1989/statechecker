@@ -11,99 +11,108 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Header, Query
+from fastapi import APIRouter, Body, Depends, Header, Query, Request
+from fastapi.security import HTTPAuthorizationCredentials
 
 import database_config_manager as DbConfig
 import databaseWrapper as DatabaseWrapper
-from adminApiCommon import GoogleDriveFolderRequest, NameRequest, require_admin_auth_readonly
-
+from adminApiCommon import GoogleDriveFolderRequest, NameRequest, require_admin_auth_hybrid
+from adminApiCommon import bearer_scheme
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
 
 @router.get("/google-drive/folders")
-def admin_list_google_drive_folders(
+async def admin_list_google_drive_folders(
+    request: Request,
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
-    """List configured Google Drive folder checks from database.
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
+    """List configured Google Drive folder checks.
 
     Args:
+        request: FastAPI request object.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Folder checks.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
     folders = DbConfig.get_google_drive_folders()
     return {"foldersToCheck": folders}
 
 
 @router.post("/google-drive/folders")
-def admin_add_google_drive_folder(
-    request: GoogleDriveFolderRequest,
+async def admin_add_google_drive_folder(
+    request: Request,
+    body: GoogleDriveFolderRequest,
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
-    """Add or update a Google Drive folder check configuration in database.
-
-    If a folder with the same name already exists, it will be replaced.
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
+    """Add a Google Drive folder to the foldersToCheck list.
 
     Args:
-        request (GoogleDriveFolderRequest): Folder definition.
+        request: FastAPI request object.
+        body (GoogleDriveFolderRequest): Folder details.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Updated foldersToCheck list.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
     DbConfig.add_google_drive_folder(
-        name=request.name,
-        folder_id=request.folderID,
-        description=request.description or "",
-        frequency_minutes=request.stateCheckFrequency_inMinutes or 1440
+        name=body.name,
+        folder_id=body.folderID,
+        description=body.description or "",
+        frequency_minutes=body.stateCheckFrequency_inMinutes or 1440
     )
 
     return {"foldersToCheck": DbConfig.get_google_drive_folders()}
 
 
 @router.delete("/google-drive/folders")
-def admin_remove_google_drive_folder(
-    request: NameRequest = Body(...),
+async def admin_remove_google_drive_folder(
+    request: Request,
+    body: NameRequest = Body(...),
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
-    """Remove a Google Drive folder check configuration from database.
-
-    Also deletes any matching backup entry from the database to avoid stale alerts.
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
+    """Remove a Google Drive folder from the foldersToCheck list.
 
     Args:
-        request (NameRequest): Folder name.
+        request: FastAPI request object.
+        body (NameRequest): Folder name.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Updated foldersToCheck list.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
-    name = request.name
+    name = body.name
 
     # Remove from config database
     DbConfig.remove_google_drive_folder(name)

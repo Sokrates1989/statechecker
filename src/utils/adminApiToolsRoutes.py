@@ -13,7 +13,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Header, Query
+from fastapi import APIRouter, Body, Depends, Header, Query, Request
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 
 import configUtils as ConfigUtils
@@ -21,7 +22,7 @@ import database_config_manager as DbConfig
 import databaseWrapper as DatabaseWrapper
 import logger as Logger
 import telegramNotificationUtils
-from adminApiCommon import NameRequest, require_admin_auth_readonly
+from adminApiCommon import NameRequest, require_admin_auth_hybrid, bearer_scheme
 
 
 configUtils = ConfigUtils.ConfigUtils()
@@ -66,24 +67,28 @@ class ToolFrequencyRequest(BaseModel):
 
 
 @router.get("/tools")
-def admin_list_tools(
+async def admin_list_tools(
+    request: Request,
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
     """List current tool checks from the database.
 
     Args:
+        request: FastAPI request object.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Tools list.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
     overrides = configUtils.getToolsUsingApiFrequencyOverrides()
     db = DatabaseWrapper.DatabaseWrapper()
@@ -104,69 +109,77 @@ def admin_list_tools(
 
 
 @router.delete("/tools")
-def admin_delete_tool(
-    request: NameRequest = Body(...),
+async def admin_delete_tool(
+    request: Request,
+    body: NameRequest = Body(...),
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
     """Unwatch a tool by deleting it from the DB.
 
     This does NOT persist an ignore list; tools will be watched again if clients
     send pings.
 
     Args:
-        request (NameRequest): Tool name.
+        request: FastAPI request object.
+        body (NameRequest): Tool name.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: Updated ignore list.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
     try:
         db = DatabaseWrapper.DatabaseWrapper()
-        db.deleteToolCheckByName(request.name)
+        db.deleteToolCheckByName(body.name)
     except Exception:
         pass
 
-    _notify_tool_unwatched(request.name)
+    _notify_tool_unwatched(body.name)
 
-    return {"deleted": request.name}
+    return {"deleted": body.name}
 
 
 @router.post("/tools/frequency")
-def admin_set_tool_frequency(
-    request: ToolFrequencyRequest,
+async def admin_set_tool_frequency(
+    request: Request,
+    body: ToolFrequencyRequest,
     server_auth_token: Optional[str] = Query(default=None),
     x_server_authentication_token: Optional[str] = Header(
         default=None,
         alias="X-Server-Authentication-Token",
     ),
-) -> Dict[str, Any]:
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+):
     """Set a persisted frequency override for an API tool in database.
 
     Args:
-        request (ToolFrequencyRequest): Tool name and new frequency.
+        request: FastAPI request object.
+        body (ToolFrequencyRequest): Tool name and new frequency.
         server_auth_token (Optional[str]): Token provided as query parameter.
         x_server_authentication_token (Optional[str]): Token provided as header.
+        credentials: Bearer token credentials.
 
     Returns:
         Dict[str, Any]: The updated overrides mapping.
     """
 
-    require_admin_auth_readonly(server_auth_token, x_server_authentication_token)
+    await require_admin_auth_hybrid(request, server_auth_token, x_server_authentication_token, credentials)
 
     # Store override in database
-    DbConfig.set_tool_frequency_override(request.name, int(request.stateCheckFrequency_inMinutes))
+    DbConfig.set_tool_frequency_override(body.name, int(body.stateCheckFrequency_inMinutes))
 
     # Also update the checked_tools table if the tool exists
     try:
-        DatabaseWrapper.DatabaseWrapper().updateToolCheckFrequencyByName(request.name, int(request.stateCheckFrequency_inMinutes))
+        DatabaseWrapper.DatabaseWrapper().updateToolCheckFrequencyByName(body.name, int(body.stateCheckFrequency_inMinutes))
     except Exception:
         pass
 

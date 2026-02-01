@@ -1,624 +1,589 @@
-/* app.js */
+/**
+ * Statechecker Admin UI
+ *
+ * Main application JavaScript for managing state checks through the API.
+ * This file handles tab loading, Keycloak authentication, and global UI functionality.
+ * 
+ * NOTE: Token authentication has been removed. Keycloak SSO is required.
+ * API token authentication is available for API-only access, not the web UI.
+ */
+
+// DOM Elements
+const loginSection = document.getElementById('login-section');
+const mainSection = document.getElementById('main-section');
+const loginBtn = document.getElementById('loginBtn');
+const loginError = document.getElementById('login-error');
+const loginSession = document.getElementById('login-session');
+const loginSessionName = document.getElementById('login-session-name');
+const logoutBtn = document.getElementById('logoutBtn');
+const userBadge = document.getElementById('userBadge');
+const userName = document.getElementById('userName');
+const statusMessage = document.getElementById('status-message');
+const statusMessageBottom = document.getElementById('status-message-bottom');
+const tabContentContainer = document.getElementById('tab-content-container');
+
+// Track loaded scripts to avoid duplicate loading
+const loadedScripts = new Set();
+
+/** Track the Keycloak user for display purposes. */
+let cachedKeycloakUser = null;
 
 /**
- * Get a DOM element by id.
+ * Build a friendly label for a Keycloak user.
  *
- * @param {string} id - Element id.
- * @returns {HTMLElement} Element.
+ * @param {Object|null} user - Keycloak user payload.
+ * @returns {string} Display label.
  */
-const $ = (id) => document.getElementById(id);
-
-/** Track last refresh timestamp. */
-let lastRefreshTime = null;
-
-/** Auto-refresh interval ID. */
-let autoRefreshInterval = null;
-
-/** Time ago update interval ID. */
-let timeAgoInterval = null;
-
-/** Auto-refresh interval in milliseconds. */
-const AUTO_REFRESH_INTERVAL_MS = 60000;
-
-/**
- * Resolve API base URL from settings.
- *
- * @returns {string} Base URL without trailing slash (always empty for relative paths).
- */
-function getApiBase() {
-  return '';
+function getUserDisplayName(user) {
+    if (!user) return 'Unknown user';
+    return user.name || user.username || user.email || 'Unknown user';
 }
 
 /**
- * Resolve server auth token from settings.
+ * Update the header badge with the current user.
  *
- * @returns {string} Token.
+ * @param {Object|null} user - Keycloak user payload.
  */
-function getToken() {
-  return ($('token').value || '').trim();
+function updateUserBadge(user) {
+    cachedKeycloakUser = user || null;
+    if (!userBadge || !userName) return;
+
+    if (!user) {
+        userBadge.classList.add('hidden');
+        userName.textContent = '';
+        return;
+    }
+
+    userName.textContent = getUserDisplayName(user);
+    userBadge.classList.remove('hidden');
+}
+
+/**
+ * Update the login screen when a session is already present.
+ *
+ * @param {Object|null} user - Keycloak user payload.
+ */
+function updateLoginSessionInfo(user) {
+    if (!loginSession || !loginSessionName || !loginBtn) return;
+
+    if (!user) {
+        loginSession.classList.add('hidden');
+        loginSessionName.textContent = '';
+        loginBtn.textContent = 'Login with Keycloak';
+        return;
+    }
+
+    loginSessionName.textContent = getUserDisplayName(user);
+    loginSession.classList.remove('hidden');
+    loginBtn.textContent = `Continue as ${getUserDisplayName(user)}`;
+}
+
+/**
+ * Trim a value to remove whitespace.
+ *
+ * @param {any} value Input value.
+ * @returns {string} Trimmed string.
+ */
+function trimValue(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).trim();
+}
+window.trimValue = trimValue;
+
+/**
+ * Determine whether Keycloak authentication is enabled.
+ * Keycloak is now REQUIRED for UI access.
+ *
+ * @returns {boolean} True when Keycloak is enabled.
+ */
+function isKeycloakFeatureEnabled() {
+    return window.KEYCLOAK_ENABLED === true || window.KEYCLOAK_ENABLED === 'true';
 }
 
 /**
  * Build headers for admin API calls.
+ * Uses Keycloak JWT token for authentication.
  *
- * @returns {Record<string, string>} Headers.
+ * @returns {Promise<Record<string, string>>} Headers.
  */
-function headers() {
-  const token = getToken();
-  return {
-    'Content-Type': 'application/json',
-    'X-Server-Authentication-Token': token,
-  };
+async function buildAuthHeaders() {
+    const baseHeaders = {
+        'Content-Type': 'application/json',
+    };
+
+    if (typeof getKeycloakToken !== 'function') {
+        throw new Error('Keycloak authentication is not available. Please configure Keycloak.');
+    }
+    
+    const token = await getKeycloakToken();
+    if (!token) {
+        throw new Error('Not authenticated. Please login with Keycloak.');
+    }
+    
+    return {
+        ...baseHeaders,
+        Authorization: `Bearer ${token}`,
+    };
 }
 
 /**
- * Fetch helper for the admin API.
+ * Make an API call with authentication.
  *
- * @param {string} path - API path (e.g. /v1/admin/tools).
- * @param {object} [options] - Fetch options.
- * @returns {Promise<any>} Parsed JSON or text.
+ * @param {string} endpoint - API endpoint path.
+ * @param {string} [method='GET'] - HTTP method.
+ * @param {Object} [body] - Request body for POST/PUT/DELETE.
+ * @returns {Promise<any>} Parsed JSON response.
  */
-async function apiFetch(path, options = {}) {
-  const base = getApiBase();
-  const url = base ? base + path : path;
-  const res = await fetch(url, {
-    ...options,
-    headers: { ...(options.headers || {}), ...headers() },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
-  }
-  const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) return res.json();
-  return res.text();
-}
+async function apiCall(endpoint, method = 'GET', body = null) {
+    const headers = await buildAuthHeaders();
+    const options = { method, headers };
 
-/**
- * Update status label.
- *
- * @param {string} msg - Message.
- */
-function setStatus(msg) {
-  $('status').textContent = msg;
-}
-
-/**
- * Load settings from session storage.
- */
-function loadSettings() {
-  $('token').value = sessionStorage.getItem('statechecker_admin_token') || '';
-}
-
-/**
- * Save settings to session storage and validate token by refreshing all data.
- */
-async function saveSettings() {
-  sessionStorage.setItem('statechecker_admin_token', $('token').value || '');
-  setStatus('Validating token...');
-  try {
-    await refreshAll();
-    setStatus('Token saved, validated and refreshed states.');
-  } catch (e) {
-    setStatus('Token saved but validation failed: ' + String(e));
-  }
-}
-
-/**
- * Switch the active tab.
- *
- * @param {string} tab - Tab id.
- */
-function setActiveTab(tab) {
-  for (const btn of document.querySelectorAll('#tabs .tab')) {
-    btn.classList.toggle('active', btn.dataset.tab === tab);
-  }
-  for (const id of ['tools', 'websites', 'backups', 'gdrive']) {
-    const panel = $('panel-' + id);
-    if (panel) panel.style.display = (id === tab) ? 'block' : 'none';
-  }
-}
-
-/**
- * Format age string from a unix timestamp.
- *
- * @param {number} tsSeconds - Unix timestamp in seconds.
- * @returns {string} Human readable age (e.g., "> 2 years ago").
- */
-function formatAgeFromTimestampSeconds(tsSeconds) {
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const diff = Math.max(0, nowSeconds - tsSeconds);
-
-  const minute = 60;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  const month = 30 * day;
-  const year = 365 * day;
-
-  if (diff < minute) return 'just now';
-  if (diff < hour) return `${Math.floor(diff / minute)} minutes ago`;
-  if (diff < day) return `${Math.floor(diff / hour)} hours ago`;
-  if (diff < month) return `${Math.floor(diff / day)} days ago`;
-  if (diff < year) return `${Math.floor(diff / month)} months ago`;
-  return `${Math.floor(diff / year)} years ago`;
-}
-
-/**
- * Format a unix timestamp (seconds) to locale date string with relative age.
- *
- * @param {string|number|null|undefined} ts - Unix timestamp in seconds.
- * @returns {string} Formatted string.
- */
-function formatTimestamp(ts) {
-  if (!ts) return '-';
-  const num = parseInt(ts, 10);
-  if (isNaN(num) || num <= 0) return String(ts);
-  const d = new Date(num * 1000);
-  const age = formatAgeFromTimestampSeconds(num);
-  return `${d.toLocaleString()} (${age})`;
-}
-
-/**
- * Determine if a tool is up based on last-up timestamp and expected frequency.
- *
- * @param {any} t - Tool row object.
- * @returns {boolean|null} True/False if computable, else null.
- */
-function isToolUp(t) {
-  if (!t.lastTimeToolWasUp || !t.stateCheckFrequency_inMinutes) return null;
-  const lastUp = parseInt(t.lastTimeToolWasUp, 10);
-  if (isNaN(lastUp)) return null;
-  const freq = t.frequencyOverride_inMinutes ?? t.stateCheckFrequency_inMinutes;
-  const now = Math.floor(Date.now() / 1000);
-  const threshold = freq * 60 * 1.5;
-  return (now - lastUp) <= threshold;
-}
-
-/**
- * Parse duration input to minutes.
- *
- * @param {string} input - User input.
- * @returns {number|null} Minutes or null.
- */
-function parseFrequencyInput(input) {
-  if (!input) return null;
-  input = input.trim().toLowerCase();
-  let match = input.match(/^([\d.]+)\s*(m|min|mins|minutes?)?$/);
-  if (match) return Math.round(parseFloat(match[1]));
-  match = input.match(/^([\d.]+)\s*(h|hr|hrs|hours?)$/);
-  if (match) return Math.round(parseFloat(match[1]) * 60);
-  match = input.match(/^([\d.]+)\s*(d|days?)$/);
-  if (match) return Math.round(parseFloat(match[1]) * 60 * 24);
-  const num = parseFloat(input);
-  if (!isNaN(num)) return Math.round(num);
-  return null;
-}
-
-/**
- * Prompt for a frequency change and apply it via admin API.
- *
- * @param {'tool'|'backup'} type - Target type.
- * @param {string} name - Target name.
- */
-async function promptFrequencyChange(type, name) {
-  const input = prompt(`Set check frequency for "${name}"\n\nEnter value (e.g. 5, 30m, 2h, 1d):`);
-  if (!input) return;
-  const minutes = parseFrequencyInput(input);
-  if (!minutes || minutes <= 0) {
-    alert('Invalid frequency. Use formats like: 5, 30m, 2h, 1d');
-    return;
-  }
-  const endpoint = type === 'tool' ? '/v1/admin/tools/frequency' : '/v1/admin/backups/frequency';
-  await apiFetch(endpoint, { method: 'POST', body: JSON.stringify({ name, stateCheckFrequency_inMinutes: minutes }) });
-}
-
-/**
- * Refresh all data from server.
- */
-async function refreshAll() {
-  await Promise.all([
-    refreshTools(),
-    refreshWebsites(),
-    refreshBackups(),
-    refreshGdrive()
-  ]);
-  updateLastRefreshTime();
-}
-
-/**
- * Update the last refresh timestamp display.
- */
-function updateLastRefreshTime() {
-  lastRefreshTime = new Date();
-  updateTimeAgoDisplay();
-}
-
-/**
- * Update the time ago display.
- */
-function updateTimeAgoDisplay() {
-  const el = $('lastRefresh');
-  if (!el || !lastRefreshTime) return;
-
-  const now = new Date();
-  const diffMs = now - lastRefreshTime;
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-
-  let timeAgo;
-  if (diffSecs < 5) {
-    timeAgo = 'just now';
-  } else if (diffSecs < 60) {
-    timeAgo = `${diffSecs}s ago`;
-  } else if (diffMins < 60) {
-    timeAgo = `${diffMins}m ago`;
-  } else {
-    timeAgo = `${Math.floor(diffMins / 60)}h ago`;
-  }
-
-  el.textContent = `${lastRefreshTime.toLocaleTimeString()} (${timeAgo})`;
-}
-
-/**
- * Refresh tools table.
- */
-async function refreshTools() {
-  const data = await apiFetch('/v1/admin/tools');
-  const body = $('toolsBody');
-  body.innerHTML = '';
-  for (const t of (data.tools || [])) {
-    const tr = document.createElement('tr');
-    const overridePill = (t.frequencyOverride_inMinutes === undefined || t.frequencyOverride_inMinutes === null)
-      ? '<span class="pill">-</span>'
-      : `<span class="pill warn">${escapeHtml(t.frequencyOverride_inMinutes)}</span>`;
-
-    const upStatus = isToolUp(t);
-    const statusPill = upStatus === true ? '<span class="pill ok">up</span>'
-      : upStatus === false ? '<span class="pill bad">down</span>'
-      : '<span class="pill">?</span>';
-
-    tr.innerHTML = `
-      <td class="mono">${escapeHtml(t.name || '')}</td>
-      <td>${statusPill}</td>
-      <td>${t.stateCheckFrequency_inMinutes ?? ''}</td>
-      <td>${overridePill}</td>
-      <td class="mono">${formatTimestamp(t.lastTimeToolWasUp)}</td>
-      <td class="actions-cell">
-        <button data-act="delete" class="danger">Unwatch</button>
-        <button data-act="freq" class="primary">Set Freq</button>
-      </td>
-    `;
-
-    for (const btn of tr.querySelectorAll('button')) {
-      btn.addEventListener('click', async () => {
-        const act = btn.dataset.act;
-        if (act === 'delete') {
-          await apiFetch('/v1/admin/tools', { method: 'DELETE', body: JSON.stringify({ name: t.name }) });
-        }
-        if (act === 'freq') {
-          await promptFrequencyChange('tool', t.name);
-        }
-        await refreshAll();
-      });
+    if (body && (method === 'POST' || method === 'PUT' || method === 'DELETE')) {
+        options.body = JSON.stringify(body);
     }
 
-    body.appendChild(tr);
-  }
-}
+    const response = await fetch(endpoint, options);
 
-/**
- * Refresh websites table.
- */
-async function refreshWebsites() {
-  const data = await apiFetch('/v1/admin/websites');
-  const body = $('websitesBody');
-  body.innerHTML = '';
-  for (const w of (data.websites || [])) {
-    const tr = document.createElement('tr');
-    const state = (w.state || '').toLowerCase();
-    const pill = state === 'up'
-      ? '<span class="pill ok">up</span>'
-      : (state === 'down'
-        ? '<span class="pill bad">down</span>'
-        : '<span class="pill">?</span>');
-
-    tr.innerHTML = `
-      <td class="mono">${escapeHtml(w.url || '')}</td>
-      <td>${pill}</td>
-      <td class="mono">${w.isDownMessageHasBeenSent ?? ''}</td>
-      <td><button class="danger">Remove</button></td>
-    `;
-
-    tr.querySelector('button').addEventListener('click', async () => {
-      await apiFetch('/v1/admin/websites', { method: 'DELETE', body: JSON.stringify({ url: w.url }) });
-      await refreshAll();
-    });
-
-    body.appendChild(tr);
-  }
-}
-
-/**
- * Normalize and validate a website URL.
- *
- * @param {string} input - User input URL.
- * @returns {string[]} Array of URLs to add (http and/or https variants).
- */
-function normalizeWebsiteUrl(input) {
-  input = input.trim();
-  if (!input) return [];
-
-  // Already has a valid protocol
-  if (/^https?:\/\//i.test(input)) {
-    return [input];
-  }
-
-  // Remove any leading protocol-like patterns that are incomplete
-  input = input.replace(/^[a-z]+:\/*/i, '');
-
-  // Validate domain pattern (basic check)
-  const domainPattern = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(\/.*)?$/i;
-  if (!domainPattern.test(input)) {
-    return [];
-  }
-
-  // Add both http and https variants
-  return [`http://${input}`, `https://${input}`];
-}
-
-/**
- * Add website from input.
- */
-async function addWebsite() {
-  const rawUrl = ($('websiteUrl').value || '').trim();
-  if (!rawUrl) return;
-
-  const urls = normalizeWebsiteUrl(rawUrl);
-  if (urls.length === 0) {
-    alert('Invalid URL. Please enter a valid domain (e.g., example.com or https://example.com/health)');
-    return;
-  }
-
-  for (const url of urls) {
-    await apiFetch('/v1/admin/websites', { method: 'POST', body: JSON.stringify({ url }) });
-  }
-  $('websiteUrl').value = '';
-  await refreshAll();
-}
-
-/**
- * Refresh backups table.
- */
-async function refreshBackups() {
-  const data = await apiFetch('/v1/admin/backups');
-  const body = $('backupsBody');
-  body.innerHTML = '';
-  for (const b of (data.backups || [])) {
-    const tr = document.createElement('tr');
-    const overridePill = (b.frequencyOverride_inMinutes === undefined || b.frequencyOverride_inMinutes === null)
-      ? '<span class="pill">-</span>'
-      : `<span class="pill warn">${escapeHtml(b.frequencyOverride_inMinutes)}</span>`;
-
-    tr.innerHTML = `
-      <td class="mono">${escapeHtml(b.name || '')}</td>
-      <td>${b.stateCheckFrequency_inMinutes ?? ''}</td>
-      <td>${overridePill}</td>
-      <td class="mono">${formatTimestamp(b.mostRecentBackupFile_creationDate)}</td>
-      <td class="actions-cell">
-        <button data-act="delete" class="danger">Unwatch</button>
-        <button data-act="freq" class="primary">Set Freq</button>
-      </td>
-    `;
-
-    for (const btn of tr.querySelectorAll('button')) {
-      btn.addEventListener('click', async () => {
-        const act = btn.dataset.act;
-        if (act === 'delete') {
-          await apiFetch('/v1/admin/backups', { method: 'DELETE', body: JSON.stringify({ name: b.name }) });
-        }
-        if (act === 'freq') {
-          await promptFrequencyChange('backup', b.name);
-        }
-        await refreshAll();
-      });
+    if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
     }
 
-    body.appendChild(tr);
-  }
-}
-
-/**
- * Refresh Google Drive config section.
- */
-async function refreshGdrive() {
-  const data = await apiFetch('/v1/admin/google-drive/folders');
-  $('gdriveList').value = JSON.stringify(data.foldersToCheck || [], null, 2);
-}
-
-/**
- * Upsert a Google Drive folder config object.
- */
-async function upsertGdrive() {
-  const raw = ($('gdriveFolderJson').value || '').trim();
-  if (!raw) return;
-  const obj = JSON.parse(raw);
-  await apiFetch('/v1/admin/google-drive/folders', { method: 'POST', body: JSON.stringify(obj) });
-  await refreshGdrive();
-}
-
-/**
- * Remove a Google Drive folder config by name.
- */
-async function removeGdrive() {
-  const name = ($('gdriveRemoveName').value || '').trim();
-  if (!name) return;
-  await apiFetch('/v1/admin/google-drive/folders', { method: 'DELETE', body: JSON.stringify({ name }) });
-  await refreshGdrive();
-}
-
-/**
- * Refresh raw config view.
- */
-async function refreshConfig() {
-  const data = await apiFetch('/v1/admin/config');
-  $('configView').value = JSON.stringify(data, null, 2);
-}
-
-/**
- * Escape HTML entities.
- *
- * @param {any} s - Input.
- * @returns {string} Escaped string.
- */
-function escapeHtml(s) {
-  return String(s)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-/**
- * Wire up UI events.
- */
-function wireUi() {
-  $('token').addEventListener('keydown', async (e) => {
-    if (e.key === 'Enter') {
-      await saveSettings();
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        return response.json();
     }
-  });
+    return response.text();
+}
 
-  $('btnSave').addEventListener('click', async () => {
-    await saveSettings();
-  });
-
-  $('btnReload').addEventListener('click', async () => {
+/**
+ * Make an API call with authentication, but handle auth errors gracefully.
+ *
+ * @param {string} endpoint - API endpoint path.
+ * @param {string} [method='GET'] - HTTP method.
+ * @param {Object} [body] - Request body for POST/PUT/DELETE.
+ * @returns {Promise<any|null>} Parsed JSON response or null if not authenticated.
+ */
+async function apiCallWithAuthCheck(endpoint, method = 'GET', body = null) {
     try {
-      setStatus('Loading...');
-      await refreshAll();
-      setStatus('Loaded.');
-    } catch (e) {
-      setStatus(String(e));
+        return await apiCall(endpoint, method, body);
+    } catch (error) {
+        // If it's an authentication error, return null instead of throwing
+        if (error.message && error.message.includes('Not authenticated')) {
+            return null;
+        }
+        // For other errors, still throw
+        throw error;
     }
-  });
+}
+window.apiCall = apiCall;
+window.apiCallWithAuthCheck = apiCallWithAuthCheck;
 
-  for (const btn of document.querySelectorAll('#tabs .tab')) {
-    btn.addEventListener('click', async () => {
-      setActiveTab(btn.dataset.tab);
-    });
-  }
+// UI Functions
+/**
+ * Set status message content and visibility.
+ *
+ * @param {HTMLElement} el - Status element.
+ * @param {string} message - Status message.
+ * @param {string} type - Status type (success|info|warning|error).
+ * @param {boolean} persist - When true, do not auto-hide.
+ */
+function setStatusMessage(el, message, type, persist) {
+    if (!el) return;
+    if (el._hideTimeout) {
+        clearTimeout(el._hideTimeout);
+        el._hideTimeout = null;
+    }
+    const textEl = el.querySelector('.status-text');
+    const closeEl = el.querySelector('.status-close');
+    if (textEl) {
+        textEl.textContent = message;
+    } else {
+        el.textContent = message;
+    }
 
-  $('toolsRefresh').addEventListener('click', () => refreshAll().catch((e) => setStatus(String(e))));
-  $('websitesRefresh').addEventListener('click', () => refreshAll().catch((e) => setStatus(String(e))));
-  $('websiteAdd').addEventListener('click', () => addWebsite().catch((e) => setStatus(String(e))));
-  $('backupsRefresh').addEventListener('click', () => refreshAll().catch((e) => setStatus(String(e))));
-  $('gdriveRefresh').addEventListener('click', () => refreshAll().catch((e) => setStatus(String(e))));
-  $('gdriveUpsert').addEventListener('click', () => upsertGdrive().catch((e) => setStatus(String(e))));
-  $('gdriveRemove').addEventListener('click', () => removeGdrive().catch((e) => setStatus(String(e))));
-  $('refreshIcon').addEventListener('click', () => triggerRefreshWithAnimation());
+    el.className = `status ${type}`;
+    el.classList.remove('hidden');
+
+    if (closeEl) {
+        closeEl.onclick = () => {
+            clearStatusMessages(true);
+        };
+    }
+
+    if (!persist) {
+        el._hideTimeout = setTimeout(() => {
+            el.classList.add('hidden');
+            el._hideTimeout = null;
+        }, 3500);
+    }
 }
 
 /**
- * Fetch and display API version in footer.
+ * Show a status message.
+ *
+ * @param {string} message - Status message.
+ * @param {string} [type='success'] - Status type.
+ * @param {boolean|null} [persist=null] - Persist flag.
+ */
+function showStatus(message, type = 'success', persist = null) {
+    const shouldPersist = persist === null ? (type === 'error' || type === 'warning') : Boolean(persist);
+    setStatusMessage(statusMessage, message, type, shouldPersist);
+    setStatusMessage(statusMessageBottom, message, type, shouldPersist);
+}
+window.showStatus = showStatus;
+
+/**
+ * Hide global status messages.
+ *
+ * @param {boolean} force - When true, also hides error/warning banners.
+ */
+function clearStatusMessages(force = false) {
+    const shouldPreserve = (el) => {
+        if (!el) return false;
+        if (force) return false;
+        return el.classList.contains('error') || el.classList.contains('warning');
+    };
+
+    if (statusMessage && !shouldPreserve(statusMessage)) statusMessage.classList.add('hidden');
+    if (statusMessageBottom && !shouldPreserve(statusMessageBottom)) statusMessageBottom.classList.add('hidden');
+}
+window.clearStatusMessages = clearStatusMessages;
+
+/**
+ * Show the login section and hide main content.
+ */
+function showLogin() {
+    if (loginSection) loginSection.classList.remove('hidden');
+    if (mainSection) mainSection.classList.add('hidden');
+    if (logoutBtn) logoutBtn.classList.add('hidden');
+    updateUserBadge(null);
+    updateLoginSessionInfo(cachedKeycloakUser);
+}
+
+/**
+ * Show the main application section.
+ */
+function showMain() {
+    if (loginSection) loginSection.classList.add('hidden');
+    if (mainSection) mainSection.classList.remove('hidden');
+    if (logoutBtn) logoutBtn.classList.remove('hidden');
+    updateUserBadge(cachedKeycloakUser);
+    updateLoginSessionInfo(null);
+}
+
+/**
+ * Set login error message.
+ *
+ * @param {string} message - Error message.
+ */
+function setLoginError(message) {
+    if (!loginError) return;
+    loginError.textContent = message;
+    loginError.classList.remove('hidden');
+}
+
+/**
+ * Clear login error message.
+ */
+function clearLoginError() {
+    if (!loginError) return;
+    loginError.textContent = '';
+    loginError.classList.add('hidden');
+}
+
+// Tab Navigation and Loading
+/**
+ * Load tab content (HTML + JS) dynamically.
+ *
+ * @param {string} tabName - Tab name (tools, websites, backups, gdrive).
+ * @returns {Promise<void>}
+ */
+async function loadTabContent(tabName) {
+    try {
+        const response = await fetch(`./${tabName}/${tabName}.html`);
+        if (!response.ok) {
+            throw new Error(`Failed to load ${tabName} tab`);
+        }
+        const html = await response.text();
+        tabContentContainer.innerHTML = html;
+
+        const tabRoot = tabContentContainer.querySelector('.tab-content');
+        if (tabRoot) {
+            tabRoot.classList.add('active');
+            tabRoot.classList.remove('hidden');
+        }
+
+        // Check if script already loaded
+        if (loadedScripts.has(tabName)) {
+            initializeTab(tabName);
+            return;
+        }
+
+        // Load and initialize tab-specific JavaScript
+        const script = document.createElement('script');
+        script.src = `./${tabName}/${tabName}.js`;
+        script.onload = () => {
+            loadedScripts.add(tabName);
+            initializeTab(tabName);
+        };
+        script.onerror = () => {
+            console.error(`Failed to load script for tab ${tabName}`);
+            tabContentContainer.innerHTML += `<div class="status error">Error loading ${tabName} functionality.</div>`;
+        };
+        document.head.appendChild(script);
+
+    } catch (error) {
+        console.error(`Failed to load tab ${tabName}:`, error);
+        tabContentContainer.innerHTML = `<div class="card"><p class="error">Error loading ${tabName} tab content.</p></div>`;
+    }
+}
+
+/**
+ * Initialize a tab after its script has loaded.
+ *
+ * @param {string} tabName - Tab name.
+ */
+function initializeTab(tabName) {
+    switch (tabName) {
+        case 'tools':
+            if (typeof initToolsTab === 'function') initToolsTab();
+            break;
+        case 'websites':
+            if (typeof initWebsitesTab === 'function') initWebsitesTab();
+            break;
+        case 'backups':
+            if (typeof initBackupsTab === 'function') initBackupsTab();
+            break;
+        case 'gdrive':
+            if (typeof initGdriveTab === 'function') initGdriveTab();
+            break;
+    }
+
+    loadTabData(tabName);
+}
+
+/**
+ * Load data for a specific tab.
+ *
+ * @param {string} tabName - Tab name.
+ * @returns {Promise<void>}
+ */
+async function loadTabData(tabName) {
+    try {
+        switch (tabName) {
+            case 'tools':
+                if (typeof loadTools === 'function') await loadTools();
+                break;
+            case 'websites':
+                if (typeof loadWebsites === 'function') await loadWebsites();
+                break;
+            case 'backups':
+                if (typeof loadBackups === 'function') await loadBackups();
+                break;
+            case 'gdrive':
+                if (typeof loadGdriveFolders === 'function') await loadGdriveFolders();
+                break;
+        }
+    } catch (error) {
+        showStatus(`Failed to load ${tabName} data: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * Switch to a tab.
+ *
+ * @param {string} tabName - Tab name.
+ * @returns {Promise<void>}
+ */
+async function switchTab(tabName) {
+    // Update tab button states
+    document.querySelectorAll('.tabs .tab').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+
+    await loadTabContent(tabName);
+}
+
+// Version Display
+/**
+ * Fetch and display API version.
  */
 async function fetchApiVersion() {
-  try {
-    const res = await fetch('/version');
-    if (res.ok) {
-      const data = await res.json();
-      $('apiVersion').textContent = data.version || 'unknown';
-    } else {
-      $('apiVersion').textContent = 'unavailable';
+    try {
+        const response = await fetch('/version');
+        if (response.ok) {
+            const data = await response.json();
+            document.getElementById('apiVersion').textContent = data.version || 'unknown';
+        } else {
+            document.getElementById('apiVersion').textContent = 'unavailable';
+        }
+    } catch (e) {
+        document.getElementById('apiVersion').textContent = 'unavailable';
     }
-  } catch (e) {
-    $('apiVersion').textContent = 'unavailable';
-  }
 }
 
 /**
- * Fetch and display Web image version in footer.
+ * Fetch and display web version.
+ *
+ * Tries multiple paths to support both nginx (web service) and API (/admin) access.
  */
 async function fetchWebVersion() {
-  try {
-    const res = await fetch('/web-version.json');
-    if (res.ok) {
-      const data = await res.json();
-      $('webVersion').textContent = data.version || 'unknown';
-    } else {
-      $('webVersion').textContent = 'local';
-    }
-  } catch (e) {
-    $('webVersion').textContent = 'local';
-  }
-}
+    const setVersion = (rawVersion) => {
+        const version = trimValue(rawVersion) || 'local';
+        document.getElementById('webVersion').textContent = version;
+        window.APP_VERSION = version;
+        window.APP_IS_DEV = version.toLowerCase() === 'dev' || version.toLowerCase().includes('local');
+    };
 
-/**
- * Start auto-refresh interval.
- */
-function startAutoRefresh() {
-  if (autoRefreshInterval) {
-    clearInterval(autoRefreshInterval);
-  }
-  autoRefreshInterval = setInterval(async () => {
+    // Try relative path first (works for /admin mount)
     try {
-      await refreshAll();
-    } catch (e) {
-      // Silently fail on auto-refresh errors
-    }
-  }, AUTO_REFRESH_INTERVAL_MS);
+        const response = await fetch('./web-version.json', { cache: 'no-store' });
+        if (response.ok) {
+            const data = await response.json();
+            setVersion(data.version);
+            return;
+        }
+    } catch { /* continue to next fallback */ }
+
+    // Try absolute path (works for nginx web service)
+    try {
+        const response = await fetch('/web-version.json', { cache: 'no-store' });
+        if (response.ok) {
+            const data = await response.json();
+            setVersion(data.version);
+            return;
+        }
+    } catch { /* continue to next fallback */ }
+
+    // Fall back to API version endpoint
+    try {
+        const response = await fetch('/version', { cache: 'no-store' });
+        if (response.ok) {
+            const data = await response.json();
+            setVersion(data.version);
+            return;
+        }
+    } catch { /* use default */ }
+
+    setVersion('local');
 }
 
+// Authentication Handlers
 /**
- * Start time ago update interval (every 10 seconds).
+ * Handle Keycloak login button click.
  */
-function startTimeAgoUpdater() {
-  if (timeAgoInterval) {
-    clearInterval(timeAgoInterval);
-  }
-  timeAgoInterval = setInterval(() => {
-    updateTimeAgoDisplay();
-  }, 10000); // Update every 10 seconds
-}
-
-/**
- * Trigger refresh with animation.
- */
-async function triggerRefreshWithAnimation() {
-  const btn = $('refreshIcon');
-  if (btn) {
-    btn.classList.add('spinning');
-  }
-  try {
-    setStatus('Refreshing...');
-    await refreshAll();
-    setStatus('Refreshed.');
-  } catch (e) {
-    setStatus(String(e));
-  } finally {
-    if (btn) {
-      btn.classList.remove('spinning');
+async function handleLogin() {
+    clearLoginError();
+    if (typeof keycloakLogin !== 'function') {
+        setLoginError('Keycloak is not available. Check configuration.');
+        return;
     }
-  }
+
+    if (typeof isKeycloakAuthenticated === 'function' && isKeycloakAuthenticated()) {
+        cachedKeycloakUser = typeof getKeycloakUser === 'function' ? getKeycloakUser() : cachedKeycloakUser;
+        updateUserBadge(cachedKeycloakUser);
+        updateLoginSessionInfo(null);
+        showMain();
+        await switchTab('tools');
+        return;
+    }
+
+    try {
+        await keycloakLogin();
+    } catch (error) {
+        setLoginError(`Login failed: ${error.message || error}`);
+    }
 }
 
 /**
- * Initialize admin UI.
+ * Handle Keycloak logout.
+ */
+async function handleLogout() {
+    if (typeof keycloakLogout === 'function') {
+        try {
+            await keycloakLogout();
+        } catch (error) {
+            showStatus(`Logout failed: ${error.message || error}`, 'error');
+        }
+    }
+    cachedKeycloakUser = null;
+    updateLoginSessionInfo(null);
+    showLogin();
+}
+
+// Event Listeners Setup
+/**
+ * Setup all event listeners.
+ */
+function setupEventListeners() {
+    // Login button
+    if (loginBtn) {
+        loginBtn.addEventListener('click', handleLogin);
+    }
+
+    // Logout button
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', handleLogout);
+    }
+
+    // Tab navigation
+    document.querySelectorAll('.tabs .tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            switchTab(btn.dataset.tab);
+        });
+    });
+}
+
+// Application Initialization
+/**
+ * Initialize the application.
+ * Keycloak SSO is REQUIRED for UI access.
  */
 async function init() {
-  loadSettings();
-  wireUi();
-  fetchApiVersion();
-  fetchWebVersion();
-  startAutoRefresh();
-  startTimeAgoUpdater();
-  try {
-    setStatus('Loading...');
-    await refreshAll();
-    setStatus('Loaded.');
-  } catch (e) {
-    setStatus(String(e));
-  }
+    fetchApiVersion();
+    fetchWebVersion();
+    setupEventListeners();
+
+    // Check if Keycloak is enabled
+    if (!isKeycloakFeatureEnabled()) {
+        showLogin();
+        setLoginError('Keycloak is not enabled. Please configure KEYCLOAK_ENABLED=true in your environment and bootstrap the Keycloak realm.');
+        showStatus('Keycloak SSO is required for UI access. Token authentication is only available for API calls.', 'error', true);
+        return;
+    }
+
+    // Check if Keycloak adapter is loaded
+    if (typeof initKeycloak !== 'function') {
+        showLogin();
+        setLoginError('Keycloak adapter failed to load. Check your Keycloak configuration.');
+        showStatus('Keycloak authentication module is not available. Verify keycloak.js and keycloak-config.js are properly configured.', 'error', true);
+        return;
+    }
+
+    if (typeof isKeycloakAdapterFallback === 'function' && isKeycloakAdapterFallback()) {
+        showLogin();
+        setLoginError('Keycloak adapter is unavailable. Allow Keycloak JS or rebuild the web image with the adapter.');
+        return;
+    }
+
+    // Initialize Keycloak
+    try {
+        const authenticated = await initKeycloak();
+        if (authenticated) {
+            cachedKeycloakUser = typeof getKeycloakUser === 'function' ? getKeycloakUser() : null;
+            updateUserBadge(cachedKeycloakUser);
+            showMain();
+            await switchTab('tools');
+            return;
+        }
+    } catch (error) {
+        setLoginError(`Keycloak initialization failed: ${error.message || error}`);
+        showStatus(`Keycloak error: ${error.message || error}. Please verify your Keycloak server is running and the realm is properly configured.`, 'error', true);
+    }
+
+    showLogin();
 }
 
-init();
+// Start application
+document.addEventListener('DOMContentLoaded', init);
