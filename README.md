@@ -1,11 +1,12 @@
-# 🚀 statechecker (server) README
+# 🚀 statechecker README
 
-Python backend for the **statechecker** system.
+Primary application repository for the **statechecker** system.
 
 It contains:
 
 - **API** (FastAPI): endpoints used by `stateChecker-client`
 - **Worker**: periodic checks for tools/websites/backups
+- **Web UI**: authenticated administration and monitoring interface from `website/`
 - **MySQL** database schema and local Docker Compose setup
 
 <br>
@@ -37,6 +38,12 @@ For health checks:
 For **Docker Swarm deployment**, use the separate repo:
 
 - `swarm/swarm-statechecker`
+
+Repository responsibilities:
+
+- **`statechecker`**: canonical application source for the API, checker worker, web UI, and database schema.
+- **`stateChecker-client`**: companion heartbeat client used by monitored tools.
+- **`swarm-statechecker`**: Docker Swarm configuration, setup, and deployment tooling.
 
 <br>
 <br>
