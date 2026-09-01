@@ -25,5 +25,10 @@ logs/dayBased/*
 
 .DS_Store
 
+# Python bytecode caches.
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
 # Local database data directory (used instead of Docker volumes for reliable persistence).
 db_data/
