@@ -2,7 +2,7 @@
 
 Updated: 2026-09-26
 
-Status: active; IONOS recovered but sent no observed alert; reverse drill on hold
+Status: active; IONOS recovered but alert credentials failed; reverse drill on hold
 
 ## Outcome and scope
 
@@ -48,6 +48,15 @@ next production-affecting batch.
   passed with API, CHECK, database, and Web all 1/1; the migration service was
   0/1 after completion. The operator observed no Telegram DOWN or UP AGAIN
   message. Alert delivery failed the drill acceptance check.
+- Read-only probes of both running CHECK containers found nonempty mounted
+  Telegram secrets, but neither raw value matched a bot-token shape. IONOS's
+  value was four characters and Ubuntu Mini's was 48. Telegram `getMe` returned
+  HTTP 404 `Not Found` for both; Ubuntu Mini's configured error chat also
+  returned 404 with its raw token. This proves the stored credentials cannot
+  authenticate as supplied. Ubuntu Mini's token may contain literal enclosing
+  quotes; a read-only normalization probe is pending. The filtered Ubuntu Mini
+  checker logs showed no matching event in the drill window, so credential
+  repair alone does not yet prove that the worker detected the outage.
 - The 3.0.2 Web image includes guidance for removing starter examples, but the
   operator has not yet accepted that UI behavior.
 
@@ -135,8 +144,8 @@ checks.
 - The operator approved the drill batch, with IONOS as the first target and a
   manual review before reversing direction. The operator's Websites screenshots
   now show the two peer entries **Up**, but no Telegram message arrived during
-  the IONOS outage or recovery. Diagnose the Ubuntu Mini checker and alert
-  route before reversing direction.
+  the IONOS outage or recovery. Repair and verify Telegram credentials, then
+  retest the first alert route before reversing direction.
 - Local source implementation of the Telegram acknowledgement and
   redeploy-pinning changes is ready as separately reviewable batches while
   the operator runs the drill. Their production rollout is not authorized by
