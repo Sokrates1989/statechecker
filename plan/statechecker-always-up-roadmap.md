@@ -22,6 +22,15 @@ observer later if the two-node operating model proves useful.
 - Post-deploy readiness polling waits for Swarm convergence and HTTPS before
   printing one final verdict.
 
+The paired image-update menu now has a local follow-up implementation awaiting
+operator approval: it resolves both pulled image digests before changing any
+service, updates API/CHECK/Web by digest, and checks the resulting service
+specifications. Selecting the already-configured tag can repair tag-only
+service references. The currently observed 3.0.2 deployments still use
+tag-only service references until that follow-up is deployed and exercised.
+A later stack redeploy can restore tag-based references, so this hardening does
+not yet make all deployment paths immutable.
+
 ### 2. Make IONOS healthy and publicly reachable — complete and accepted
 
 Operator evidence from IONOS confirms:
@@ -49,10 +58,17 @@ Telegram enabled, and one running replica. Ubuntu Mini reached the IONOS peer
 health URL with HTTP 200. The operator's Websites screenshots show each instance
 watching the other's API health URL with an **Up** state.
 
-The starter-example removal UX has a local fix awaiting a web-image release and
-operator approval. The UI will explain that a real website must be added before
-removing the examples; it will not send a misleading delete request in the
-example-only state. It also verifies the refreshed list before reporting success.
+Both hosts now run the 3.0.2 API, checker, and web images, with a five-minute
+check interval and Telegram enabled. The operator confirmed matching fingerprints
+for their error and information chat-ID lists, and neither host has a Node.js
+package installed. These checks do not yet prove bot-token equality, Telegram
+delivery, or down/recovery notifications.
+
+The starter-example removal UX was included in web image 3.0.2 and is deployed
+on both hosts; operator acceptance of that behavior remains outstanding. The UI
+explains that a real website must be added before removing the examples, avoids
+a misleading delete request in the example-only state, and refreshes the list
+before reporting removal success.
 
 #### Configuration preflight
 
