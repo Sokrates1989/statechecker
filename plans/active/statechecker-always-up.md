@@ -2,7 +2,7 @@
 
 Updated: 2026-09-26
 
-Status: active; outage drill approved, not yet run
+Status: active; local reliability changes prepared, outage drill and operator acceptance pending
 
 ## Outcome and scope
 
@@ -33,6 +33,11 @@ next production-affecting batch.
   enabled. The Telegram sender bot secret exists on both hosts. Error and
   information recipient-list fingerprints match across the two hosts; this
   does not prove bot-token equality or message delivery.
+- On 2026-09-26, the operator ran `./quick-start.sh --health` on both hosts:
+  each API, CHECK, database, and Web service was 1/1 and each public API/Web
+  endpoint passed. Cross-host `/health` probes returned HTTP 200 in both
+  directions. Both hosts have Telegram enabled with one configured error chat
+  and email alerts disabled. Fresh Websites-tab peer states remain unconfirmed.
 - The Websites UI previously showed IONOS watching
   `https://api.statechecker.fe-wi.com/health` and Ubuntu Mini watching
   `https://api.statechecker.ionos.fe-wi.com/health`, both **Up**. A fresh
@@ -42,7 +47,7 @@ next production-affecting batch.
 
 ## Milestones
 
-### 1. Confirm mutual monitoring — configured; final check pending
+### 1. Confirm mutual monitoring — health preflight passed; UI check pending
 
 On both Websites tabs, confirm that exactly one peer API sentinel remains and
 is **Up** after at least one five-minute worker cycle. Confirm the intended
@@ -53,7 +58,7 @@ the initial rollout.
 Acceptance: both peers remain visible and **Up**, and the checker services
 remain at 1/1. This is the preflight for the outage drill.
 
-### 2. Controlled failure and recovery drill — approved; pending execution
+### 2. Controlled failure and recovery drill — approved; operator execution pending
 
 Test IONOS API first, with Ubuntu Mini observing. After the operator reviews
 that result, reverse the direction. For each direction, preflight the healthy
@@ -72,56 +77,67 @@ the API first and investigate rather than extending the outage indefinitely.
 Rollback: restore the target API to one replica immediately, then verify its
 public health URL and Swarm convergence. The drill changes no persisted data.
 
-### 3. Make Telegram delivery acknowledgement reliable — planned after drill
+### 3. Make Telegram delivery acknowledgement reliable — local code and tests ready
 
-The current checker stores a website's down-message-sent flag before calling
-Telegram and ignores the sender's Boolean result. A temporary Telegram failure
-can therefore suppress retry. Change the worker so delivery failure does not
-falsely acknowledge an alert. Review the configured error recipients and any
-email behavior before choosing the smallest safe policy for partial delivery;
-avoid unbounded duplicate messages to recipients that did succeed.
+The published 3.0.2 checker stores a website's down-message-sent flag before
+calling Telegram and ignores the sender's Boolean result. Local source now
+acknowledges DOWN and UP AGAIN after at least one Telegram error chat accepts
+the message. A total failure stays pending for the next worker cycle. Partial
+success is logged and acknowledged to avoid repeats to chats that succeeded;
+the existing one-flag schema cannot track each recipient separately. Website
+Up/Down state is saved independently of alert acknowledgement. The two live
+hosts each use one Telegram error chat and have email alerts disabled. With
+Telegram enabled, email sends occur only after Telegram acknowledgement so
+failed Telegram retries do not duplicate email.
 
-Affected repository: Statechecker application. Validate with focused tests for
-successful send, failed send, recovery, and partial-recipient behavior, plus
-the relevant local test suite. The operator controls image build/publication
-and tests the new image on each host before accepting this batch. No database
-schema migration is planned. If rollout fails, restore the prior working image
-and preserve the database.
+Affected repository: Statechecker application. Local focused tests for
+successful send, failed send, recovery, partial-recipient behavior, and
+email-only compatibility pass. The operator controls image build/publication
+and tests the new image on each host after the drill before accepting this
+batch. No database schema migration is planned. If rollout fails, restore the
+prior working image and preserve the database.
 
-### 4. Preserve image identity through normal redeploys — planned
+### 4. Preserve image identity through normal redeploys — local code and tests ready
 
-The paired-update menu pins running service specs, but ordinary stack deploys
-still render tag-based image references from `.env`. Prefer resolving both
-versioned tags to unambiguous repository digests before changing services and
-using those references in the normal deploy path. Keep the human-readable
-version tags in `.env`; fail closed if either digest cannot be established.
-Avoid a second rollout solely to re-pin after deployment.
+The paired-update menu pins running service specs, but the live 3.0.2 tooling
+still renders tag-based image references from `.env` during ordinary stack
+deploys. Local deployment code now pulls both configured versioned tags,
+resolves unambiguous repository digests, renders those references for API,
+CHECK, and Web, and verifies the rendered images before stack deploy. The
+human-readable version tags remain in `.env`. Pull, digest, or render failure
+stops before service changes; no second rollout should be needed to re-pin.
 
-Affected repository: Swarm Statechecker deployment. Validate Bash syntax,
-mocked failure paths, stack rendering, and a manual redeploy that retains the
-expected digests and passes external health checks. Preserve existing rollback
-targets and do not change database or secret handling. The operator reviews
-this as a separate batch before production use.
+Affected repository: Swarm Statechecker deployment. Local Bash syntax,
+mocked failure paths, and stack rendering pass. A manual redeploy that retains
+the expected digests and passes external health checks is still required.
+Preserve existing rollback targets and do not change database or secret
+handling. The operator reviews this as a separate batch before production use.
 
-### 5. Final operator acceptance and runbook — pending
+### 5. Final operator acceptance and runbook — draft complete; acceptance pending
 
 Confirm the 3.0.2 starter-example removal guidance and successful removal
 after adding a real peer URL. Document the minimal operating procedure:
 deployment, health checks, peer URL ownership, Telegram destination checks,
 image update/redeploy, emergency API restoration, and response to missing
-alerts. Close this plan only after both drill directions and the two reliability
-fixes have passed their separate operator checks.
+alerts. The draft operating procedure is in the deployment repository at
+`docs/always-up-operations.md`. Close this plan only after both drill
+directions and the two reliability fixes have passed their separate operator
+checks.
 
 ## Decisions and authorization
 
 - The operator approved the drill batch, with IONOS as the first target and a
   manual review before reversing direction. Fresh peer **Up** states remain a
   required preflight, not an assumed result.
-- The Telegram acknowledgement and redeploy-pinning changes are proposed
-  separate batches; their production rollout is not authorized by this plan.
-  The operator retains image publication, deployment, and batch approval.
-- If the current recipient/email configuration makes partial-delivery semantics
-  materially ambiguous, resolve that choice before implementing milestone 3.
+- Local source implementation of the Telegram acknowledgement and
+  redeploy-pinning changes is ready as separately reviewable batches while
+  the operator runs the drill. Their production rollout is not authorized by
+  this plan. The operator retains image publication, deployment, and batch
+  approval.
+- The live one-recipient, email-disabled configuration permits one-success
+  acknowledgement without a per-recipient schema. Partial success in a
+  future multi-recipient configuration is acknowledged and logged; retrying
+  only failed recipients would require a durable per-recipient delivery record.
 
 ## Deferred, not required for two-server acceptance
 

@@ -20,6 +20,7 @@ import configUtils as ConfigUtils
 import emailUtils as EmailUtils
 import telegramNotificationUtils
 import checkWorkerMessageHandlers
+import checkWorkerAlertDelivery
 
 ## Initialize vars.
 
@@ -102,6 +103,12 @@ while True:
         # Check the states of the tools.
         for toolStateItem in toolStateItems:
 
+            # Website state describes the last check, regardless of whether an
+            # outage or recovery alert has reached Telegram yet.
+            checkWorkerAlertDelivery.record_website_check_state(
+                toolStateItem, dbWrapper
+            )
+
             # Is the tool up?
             if toolStateItem.toolIsUp == False:
 
@@ -116,17 +123,6 @@ while True:
                     print(toolStateItem.name)
                     print("sending mesage now..")
 
-                    # Indicate, that tool is down message has been sent.
-                    if toolStateItem.isCustomCheck == True:
-                        dbWrapper.updateWebsiteState(toolStateItem.name, "Down")
-                        dbWrapper.updateWebsiteIsDownMessageHasBeenSentState(toolStateItem.name, 1)
-                    elif toolStateItem.isBackupCheck == True:
-                        # Indicate to DB, that message has been sent.
-                        dbWrapper.updateBackupIsDownMessageHasBeenSentState(toolStateItem.name, 1)
-                    else:
-                        # Indicate to DB, that message has been sent.
-                        dbWrapper.updateToolIsDownMessageHasBeenSentState(toolStateItem.name, 1)
-
                     # Send the message to the error message channel.
                     toolStateItemIsDownMsg = "Your tool is <b>DOWN!</b> \n\n<b>" + str(toolStateItem.name) + "</b>"
                     toolStateItemIsDownMsg += "" if toolStateItem.description == "" else "\n" + str(
@@ -134,20 +130,20 @@ while True:
                     toolStateItemIsDownMsg += "" if toolStateItem.statusMessage == "" or toolStateItem.statusMessage == "OK" else "\n" + str(
                         toolStateItem.statusMessage)
                     
-                    # Send message to admin telegram chat, if enabled.
-                    if configUtils.areTelegramStatusMessagesEnabled():
-                        reply_markup = telegramNotificationUtils.build_admin_inline_keyboard(toolStateItem)
-                        for errorChatID in errorChatIDs:
-                            telegramNotificationUtils.safe_send_telegram_message(
-                                bot=bot,
-                                logger=logger,
-                                chat_id=errorChatID,
-                                message=toolStateItemIsDownMsg,
-                                reply_markup=reply_markup,
-                            )
-
-                    # Send mails.
-                    emailUtils.send_error_mails(toolStateItemIsDownMsg)
+                    reply_markup = telegramNotificationUtils.build_admin_inline_keyboard(toolStateItem)
+                    checkWorkerAlertDelivery.deliver_alert(
+                        tool_state_item=toolStateItem,
+                        is_down=True,
+                        message=toolStateItemIsDownMsg,
+                        db_wrapper=dbWrapper,
+                        config_utils=configUtils,
+                        bot=bot,
+                        error_chat_ids=errorChatIDs,
+                        logger=logger,
+                        email_utils=emailUtils,
+                        telegram_sender=telegramNotificationUtils.safe_send_telegram_message,
+                        reply_markup=reply_markup,
+                    )
                     
 
 
@@ -164,17 +160,6 @@ while True:
                     print(toolStateItem.name)
                     print("sending message now..")
 
-                    # Indicate, that tool is up message has been sent.
-                    if toolStateItem.isCustomCheck == True:
-                        dbWrapper.updateWebsiteState(toolStateItem.name, "Up")
-                        dbWrapper.updateWebsiteIsDownMessageHasBeenSentState(toolStateItem.name, 0)
-                    elif toolStateItem.isBackupCheck == True:
-                        # Indicate to DB, that message has been sent.
-                        dbWrapper.updateBackupIsDownMessageHasBeenSentState(toolStateItem.name, 0)
-                    else:
-                        # Indicate to DB, that message has been sent.
-                        dbWrapper.updateToolIsDownMessageHasBeenSentState(toolStateItem.name, 0)
-
                     # Send the message to the error message channel.
                     toolStateItemIsUpAgainMsg = "Your tool is <b>UP AGAIN!</b> \n\n<b>" + str(
                         toolStateItem.name) + "</b>"
@@ -183,18 +168,18 @@ while True:
                     toolStateItemIsUpAgainMsg += "" if toolStateItem.statusMessage == "" or toolStateItem.statusMessage == "OK" else "\n" + str(
                         toolStateItem.statusMessage)
                     
-                    # Send message to admin telegram chat, if enabled.
-                    if configUtils.areTelegramStatusMessagesEnabled():
-                        for errorChatID in errorChatIDs:
-                            telegramNotificationUtils.safe_send_telegram_message(
-                                bot=bot,
-                                logger=logger,
-                                chat_id=errorChatID,
-                                message=toolStateItemIsUpAgainMsg,
-                            )
-
-                    # Send mails.
-                    emailUtils.send_error_mails(toolStateItemIsUpAgainMsg)
+                    checkWorkerAlertDelivery.deliver_alert(
+                        tool_state_item=toolStateItem,
+                        is_down=False,
+                        message=toolStateItemIsUpAgainMsg,
+                        db_wrapper=dbWrapper,
+                        config_utils=configUtils,
+                        bot=bot,
+                        error_chat_ids=errorChatIDs,
+                        logger=logger,
+                        email_utils=emailUtils,
+                        telegram_sender=telegramNotificationUtils.safe_send_telegram_message,
+                    )
 
         # Send info messages that tool is still checking.
         if (i % telegramMessageEveryXMinutes == 0):

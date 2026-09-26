@@ -9,6 +9,14 @@ It contains:
 - **Web UI**: authenticated administration and monitoring interface from `website/`
 - **MySQL** database schema and local Docker Compose setup
 
+The checker persists each website's latest Up/Down state independently of
+notification delivery. With Telegram enabled, DOWN and UP AGAIN alerts remain
+pending until at least one configured error chat accepts the message. Partial
+delivery is logged and acknowledged after one success, because the database
+stores one flag per monitored item. Email error messages are sent after that
+acknowledgement, avoiding repeated email during Telegram outages. With
+Telegram disabled, the existing email-only behavior remains.
+
 <br>
 
 ## Table of Contents
