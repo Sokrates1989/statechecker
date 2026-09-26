@@ -7,7 +7,7 @@
 /**
  * Load websites from the API and refresh the UI.
  *
- * @returns {Promise<void>}
+ * @returns {Promise<Array|null>} Current websites, or null if loading failed.
  */
 async function loadWebsites() {
     try {
@@ -16,13 +16,31 @@ async function loadWebsites() {
             // Not authenticated - clear data and show empty state
             window.websitesData = [];
             renderWebsites();
-            return;
+            return null;
         }
         window.websitesData = data.websites || [];
         renderWebsites();
+        return window.websitesData;
     } catch (error) {
         showStatus(`Failed to load websites: ${error.message}`, 'error');
+        return null;
     }
+}
+
+/**
+ * Identify a first-run list containing only bundled example websites.
+ *
+ * @param {Array} websites - Current website records.
+ * @returns {boolean} True when every listed URL is a starter example.
+ */
+function hasOnlyExampleWebsites(websites) {
+    return websites.length > 0 && websites.every((website) => {
+        try {
+            return new URL(website.url).hostname.toLowerCase() === 'websitetotest.com';
+        } catch {
+            return false;
+        }
+    });
 }
 
 /**
@@ -33,6 +51,15 @@ async function loadWebsites() {
 function renderWebsites() {
     const container = document.getElementById('websites-list');
     const websites = window.websitesData || [];
+    const exampleGuidance = document.getElementById('website-examples-guidance');
+    if (exampleGuidance) {
+        const examplesOnly = hasOnlyExampleWebsites(websites);
+        exampleGuidance.classList.toggle('hidden', !examplesOnly);
+        if (examplesOnly) {
+            exampleGuidance.textContent = window.statecheckerT('websites.addBeforeRemovingExamples');
+            exampleGuidance.lang = window.statecheckerLocale;
+        }
+    }
 
     if (websites.length === 0) {
         container.innerHTML = '<p class="no-items">No websites being watched. Add one above to get started.</p>';
@@ -121,14 +148,28 @@ async function addWebsite() {
  * @returns {Promise<void>}
  */
 async function removeWebsite(url) {
-    if (!confirm(`Remove website "${url}" from monitoring?`)) return;
+    if (hasOnlyExampleWebsites(window.websitesData || [])) {
+        showStatus(window.statecheckerT('websites.addBeforeRemovingExamples'), 'warning');
+        return;
+    }
+    if (!confirm(window.statecheckerT('websites.confirmRemove', { url }))) return;
 
     try {
         await apiCall('/v1/admin/websites', 'DELETE', { url });
-        showStatus(`Website "${url}" removed`);
-        await loadWebsites();
+        const websites = await loadWebsites();
+        if (websites === null) {
+            return;
+        }
+        if (websites.some((website) => website.url === url)) {
+            const key = hasOnlyExampleWebsites(websites)
+                ? 'websites.addBeforeRemovingExamples'
+                : 'websites.removeFailed';
+            showStatus(window.statecheckerT(key, { url }), 'warning');
+            return;
+        }
+        showStatus(window.statecheckerT('websites.removed', { url }));
     } catch (error) {
-        showStatus(`Failed to remove website: ${error.message}`, 'error');
+        showStatus(window.statecheckerT('websites.removeRequestFailed', { error: error.message }), 'error');
     }
 }
 

@@ -44,8 +44,15 @@ deployment checkout to `fec6d0b`, retained the existing `state_checker` database
 and `/swarm/administration/statechecker/db_data` mount, regenerated the proxy-TLS
 stack, and deployed it. Readiness passed on attempt 8 of 10; the API, checker,
 database, and web services showed 1/1 replicas, and the public API and web
-endpoints passed HTTPS checks. The live checker interval and peer entries still
-need the manual checks below.
+endpoints passed HTTPS checks. The live checker reports a five-minute interval,
+Telegram enabled, and one running replica. Ubuntu Mini reached the IONOS peer
+health URL with HTTP 200. The operator's Websites screenshots show each instance
+watching the other's API health URL with an **Up** state.
+
+The starter-example removal UX has a local fix awaiting a web-image release and
+operator approval. The UI will explain that a real website must be added before
+removing the examples; it will not send a misleading delete request in the
+example-only state. It also verifies the refreshed list before reporting success.
 
 #### Configuration preflight
 
@@ -77,6 +84,8 @@ On both deployment hosts, verify locally that:
 - Each instance lists exactly one peer sentinel in the Websites tab.
 - Both sentinels remain **Up** after at least one five-minute worker cycle.
 - Both check workers use the intended common Telegram destination.
+- The updated web UI prevents example-only removal, then allows removing the
+  examples after a real peer URL has been added.
 - No redeploy is required because website configuration is database-backed.
 
 ### 4. Perform failure and recovery drill — pending
