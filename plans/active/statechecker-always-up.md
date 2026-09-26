@@ -2,7 +2,7 @@
 
 Updated: 2026-09-26
 
-Status: active; local reliability changes prepared, outage drill and operator acceptance pending
+Status: active; IONOS recovered but sent no observed alert; reverse drill on hold
 
 ## Outcome and scope
 
@@ -37,17 +37,23 @@ next production-affecting batch.
   each API, CHECK, database, and Web service was 1/1 and each public API/Web
   endpoint passed. Cross-host `/health` probes returned HTTP 200 in both
   directions. Both hosts have Telegram enabled with one configured error chat
-  and email alerts disabled. Fresh Websites-tab peer states remain unconfirmed.
-- The Websites UI previously showed IONOS watching
+  and email alerts disabled.
+- The operator's post-drill Websites screenshots show IONOS watching
   `https://api.statechecker.fe-wi.com/health` and Ubuntu Mini watching
-  `https://api.statechecker.ionos.fe-wi.com/health`, both **Up**. A fresh
-  post-rollout check after a worker cycle is still needed.
+  `https://api.statechecker.ionos.fe-wi.com/health`, exactly one entry on each
+  page and both **Up**. A fresh check is still needed after image rollout.
+- In the IONOS drill on 2026-09-26, the API was scaled to zero at 14:19:00
+  UTC; its public `/health` returned HTTP 502 at 14:19:11. After restoration,
+  `/health` returned HTTP 200 at 14:26:28. At 14:32:28 the stack health check
+  passed with API, CHECK, database, and Web all 1/1; the migration service was
+  0/1 after completion. The operator observed no Telegram DOWN or UP AGAIN
+  message. Alert delivery failed the drill acceptance check.
 - The 3.0.2 Web image includes guidance for removing starter examples, but the
   operator has not yet accepted that UI behavior.
 
 ## Milestones
 
-### 1. Confirm mutual monitoring — health preflight passed; UI check pending
+### 1. Confirm mutual monitoring — health and peer UI passed; alert route failed
 
 On both Websites tabs, confirm that exactly one peer API sentinel remains and
 is **Up** after at least one five-minute worker cycle. Confirm the intended
@@ -58,7 +64,7 @@ the initial rollout.
 Acceptance: both peers remain visible and **Up**, and the checker services
 remain at 1/1. This is the preflight for the outage drill.
 
-### 2. Controlled failure and recovery drill — approved; operator execution pending
+### 2. Controlled failure and recovery drill — IONOS alert failure; reverse direction on hold
 
 Test IONOS API first, with Ubuntu Mini observing. After the operator reviews
 that result, reverse the direction. For each direction, preflight the healthy
@@ -127,8 +133,10 @@ checks.
 ## Decisions and authorization
 
 - The operator approved the drill batch, with IONOS as the first target and a
-  manual review before reversing direction. Fresh peer **Up** states remain a
-  required preflight, not an assumed result.
+  manual review before reversing direction. The operator's Websites screenshots
+  now show the two peer entries **Up**, but no Telegram message arrived during
+  the IONOS outage or recovery. Diagnose the Ubuntu Mini checker and alert
+  route before reversing direction.
 - Local source implementation of the Telegram acknowledgement and
   redeploy-pinning changes is ready as separately reviewable batches while
   the operator runs the drill. Their production rollout is not authorized by
