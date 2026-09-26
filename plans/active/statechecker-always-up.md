@@ -49,14 +49,16 @@ next production-affecting batch.
   0/1 after completion. The operator observed no Telegram DOWN or UP AGAIN
   message. Alert delivery failed the drill acceptance check.
 - Read-only probes of both running CHECK containers found nonempty mounted
-  Telegram secrets, but neither raw value matched a bot-token shape. IONOS's
-  value was four characters and Ubuntu Mini's was 48. Telegram `getMe` returned
-  HTTP 404 `Not Found` for both; Ubuntu Mini's configured error chat also
-  returned 404 with its raw token. This proves the stored credentials cannot
-  authenticate as supplied. Ubuntu Mini's token may contain literal enclosing
-  quotes; a read-only normalization probe is pending. The filtered Ubuntu Mini
-  checker logs showed no matching event in the drill window, so credential
-  repair alone does not yet prove that the worker detected the outage.
+  Telegram secrets, but neither raw value matched a bot-token shape. Telegram
+  `getMe` returned HTTP 404 `Not Found` for both raw values. Ubuntu Mini's
+  48-character value has literal enclosing quotes. Removing that pair in a
+  read-only probe produced a valid token: Telegram `getMe` and `getChat` for its
+  configured error chat both returned HTTP 200. The running CHECK container
+  still receives the quoted secret. IONOS's value is four characters, has no
+  enclosing quotes, and is not a valid token shape. Its normalized Bot API
+  probes were skipped. The filtered Ubuntu Mini checker logs showed no matching
+  event in the drill window, so credential repair alone will not prove that the
+  worker detected the outage.
 - The 3.0.2 Web image includes guidance for removing starter examples, but the
   operator has not yet accepted that UI behavior.
 
@@ -144,8 +146,10 @@ checks.
 - The operator approved the drill batch, with IONOS as the first target and a
   manual review before reversing direction. The operator's Websites screenshots
   now show the two peer entries **Up**, but no Telegram message arrived during
-  the IONOS outage or recovery. Repair and verify Telegram credentials, then
-  retest the first alert route before reversing direction.
+  the IONOS outage or recovery. Repair Ubuntu Mini's quoted checker secret and
+  retest the first alert route. Replace IONOS's invalid checker secret before
+  the reverse drill. Verify Telegram authentication and chat access on each
+  running worker without exposing either token.
 - Local source implementation of the Telegram acknowledgement and
   redeploy-pinning changes is ready as separately reviewable batches while
   the operator runs the drill. Their production rollout is not authorized by
