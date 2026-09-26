@@ -1,6 +1,6 @@
 # Statechecker Always-Up Roadmap
 
-Updated: 2026-08-26
+Updated: 2026-09-26
 
 ## Goal
 
@@ -38,6 +38,14 @@ Operator evidence from IONOS confirms:
 Use one API health URL per peer for the initial rollout. This is a higher-signal
 sentinel than the static web root and avoids duplicate outage messages when a
 whole server becomes unavailable.
+
+Ubuntu Mini deployment prerequisite is complete. The operator updated its
+deployment checkout to `fec6d0b`, retained the existing `state_checker` database
+and `/swarm/administration/statechecker/db_data` mount, regenerated the proxy-TLS
+stack, and deployed it. Readiness passed on attempt 8 of 10; the API, checker,
+database, and web services showed 1/1 replicas, and the public API and web
+endpoints passed HTTPS checks. The live checker interval and peer entries still
+need the manual checks below.
 
 #### Configuration preflight
 
