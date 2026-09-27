@@ -2,8 +2,8 @@
 
 Updated: 2026-09-27
 
-Status: active; both outage drills delivered DOWN and UP AGAIN; final Websites
-check and operator acceptance pending
+Status: complete; both outage drills delivered DOWN and UP AGAIN, and the
+operator confirmed both Websites tabs show exactly one peer URL as Up
 
 ## Outcome and scope
 
@@ -13,10 +13,9 @@ recovery alerts to the same Telegram error channel. Keep the existing checker
 worker inside Statechecker; no separate watchdog repository or feature-parity
 project is needed for this rollout.
 
-This is the single active plan for the Statechecker application and its Swarm
-deployment repository. Implementation, operator testing, and approval are
-separate states. The operator manually tests and approves each batch before the
-next production-affecting batch.
+This was the single active plan for the Statechecker application and its Swarm
+deployment repository. Implementation, operator testing, and approval were
+tracked separately. The operator tested each production batch before the next.
 
 ## Verified starting point
 
@@ -43,7 +42,8 @@ next production-affecting batch.
 - The operator's Websites screenshots show IONOS watching
   `https://api.statechecker.fe-wi.com/health` and Ubuntu Mini watching
   `https://api.statechecker.ionos.fe-wi.com/health`, exactly one entry on each
-  page and both **Up**. A fresh check is still needed after image rollout.
+  page and both **Up**. The operator reconfirmed both tabs after image rollout
+  and the reverse drill.
 - In the IONOS drill on 2026-09-26, the API was scaled to zero at 14:19:00
   UTC; its public `/health` returned HTTP 502 at 14:19:11. After restoration,
   `/health` returned HTTP 200 at 14:26:28. At 14:32:28 the stack health check
@@ -91,12 +91,12 @@ next production-affecting batch.
   The supplied Telegram screenshot shows a **DOWN** message at 17:58 and an
   **UP AGAIN** message at 18:07, both naming the Ubuntu Mini API health URL.
   The pasted shell output ended during the six-minute recovery wait, so its
-  final `DRILL_END` line was not observed. Fresh post-rollout Websites-tab
-  confirmation remains pending.
+  final `DRILL_END` line was not observed. After the wait, the operator
+  confirmed both Websites tabs showed exactly one peer API URL as **Up**.
 
 ## Milestones
 
-### 1. Confirm mutual monitoring — health and peer UI passed; fresh post-rollout UI check pending
+### 1. Confirm mutual monitoring — passed
 
 On both Websites tabs, confirm that exactly one peer API sentinel remains and
 is **Up** after at least one five-minute worker cycle. Confirm the intended
@@ -107,7 +107,7 @@ the initial rollout.
 Acceptance: both peers remain visible and **Up**, and the checker services
 remain at 1/1. This is the preflight for the outage drill.
 
-### 2. Controlled failure and recovery drill — both alert pairs and recovery observed
+### 2. Controlled failure and recovery drill — passed in both directions
 
 Test IONOS API first, with Ubuntu Mini observing. After the operator reviews
 that result, reverse the direction. For each direction, preflight the healthy
@@ -126,7 +126,7 @@ the API first and investigate rather than extending the outage indefinitely.
 Rollback: restore the target API to one replica immediately, then verify its
 public health URL and Swarm convergence. The drill changes no persisted data.
 
-### 3. Make Telegram delivery acknowledgement reliable — deployed; both directions validated
+### 3. Make Telegram delivery acknowledgement reliable — passed
 
 The earlier 3.0.2 checker stored a website's down-message-sent flag before
 calling Telegram and ignored the sender's Boolean result. Version `3.1.1` now
@@ -146,7 +146,7 @@ on both hosts. Ubuntu Mini's live worker delivered the IONOS DOWN and UP AGAIN
 messages; IONOS's live worker delivered the reverse pair. No database schema
 migration was required.
 
-### 4. Preserve image identity through normal redeploys — validated at 3.1.0
+### 4. Preserve image identity through normal redeploys — passed at 3.1.0
 
 The paired-update menu already pinned running service specs, but version
 `3.0.2` rendered tag-based image references from `.env` during ordinary stack
@@ -162,15 +162,14 @@ stack redeploy on each host retained the expected digests and passed external
 health checks. The subsequent `3.1.1` image updates also pinned both image
 digests. Preserve existing rollback targets and secret handling.
 
-### 5. Final operator acceptance and runbook — draft complete; acceptance pending
+### 5. Final operator acceptance and runbook — complete
 
-Confirm that each post-rollout Websites tab contains only its peer URL and is
-**Up** after the reverse drill. Document the minimal operating procedure:
+The operator confirmed that each post-rollout Websites tab contains only its
+peer URL and is **Up** after the reverse drill. The operating procedure covers:
 deployment, health checks, peer URL ownership, Telegram destination checks,
 image update/redeploy, emergency API restoration, and response to missing
-alerts. The draft operating procedure is in the deployment repository at
-`docs/always-up-operations.md`. Close this plan after fresh peer UI checks and
-final operator acceptance.
+alerts. The operating procedure is in the deployment repository at
+`docs/always-up-operations.md`. All defined acceptance checks are complete.
 
 ## Decisions and authorization
 
@@ -179,10 +178,11 @@ final operator acceptance.
   operator reported that it worked perfectly. Both hosts' Telegram secrets
   have been repaired and their UI test sends succeeded. The reverse drill on
   Ubuntu Mini also delivered the alert pair and passed local health checks.
-  Final Websites-tab confirmation and operator acceptance remain pending.
+  The operator then confirmed both Websites tabs each show one peer URL as
+  **Up**, completing the final acceptance check.
 - The operator controls image build/publication, deployment, and final batch
   approval. The Telegram acknowledgement and redeploy-pinning changes are live
-  in version `3.1.1`; their remaining checks are listed in the milestones.
+  in version `3.1.1`; the milestones record their completed checks.
 - The live one-recipient, email-disabled configuration permits one-success
   acknowledgement without a per-recipient schema. Partial success in a
   future multi-recipient configuration is acknowledged and logged; retrying
