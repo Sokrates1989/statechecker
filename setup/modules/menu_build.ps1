@@ -107,7 +107,7 @@ function Build-AllImages {
     # Build API image first
     Write-Host "[BUILD] Building API image..." -ForegroundColor Cyan
     if (Test-Path "build-image\build-image.ps1") {
-        & .\build-image\build-image.ps1
+        & .\build-image\build-image.ps1 -ImageName $API_IMAGE_NAME -ImageVersion $API_IMAGE_VERSION
         if ($LASTEXITCODE -ne 0) {
             Write-Host "[ERROR] API image build failed" -ForegroundColor Red
             return

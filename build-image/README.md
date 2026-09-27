@@ -14,6 +14,14 @@ Scripts for building and pushing the Statechecker Docker image.
 .\build-image.ps1
 ```
 
+Run the script directly to choose the image name and version interactively. To provide both values without another prompt:
+
+```powershell
+.\build-image.ps1 -ImageName 'sokrates1989/statechecker' -ImageVersion '3.1.1'
+```
+
+Quick Start option 6 passes its selected name and version to this script, so the version is entered only once.
+
 ## 🔧 Process
 
 The build script will:

@@ -1,6 +1,14 @@
 # build-image.ps1
 # Build and push the Statechecker Docker image
 
+param(
+    [ValidateScript({ -not [string]::IsNullOrWhiteSpace($_) })]
+    [string]$ImageName,
+
+    [ValidateScript({ -not [string]::IsNullOrWhiteSpace($_) })]
+    [string]$ImageVersion
+)
+
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -29,10 +37,14 @@ if (Test-Path .env) {
     }
 }
 
-# Prompt for image name
-$inputName = Read-Host "Docker image name [$IMAGE_NAME]"
-if (-not [string]::IsNullOrWhiteSpace($inputName)) {
-    $IMAGE_NAME = $inputName
+# Use the menu's selection when provided; prompt for direct runs.
+if ($PSBoundParameters.ContainsKey('ImageName')) {
+    $IMAGE_NAME = $ImageName
+} else {
+    $inputName = Read-Host "Docker image name [$IMAGE_NAME]"
+    if (-not [string]::IsNullOrWhiteSpace($inputName)) {
+        $IMAGE_NAME = $inputName
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($IMAGE_NAME)) {
@@ -40,10 +52,13 @@ if ([string]::IsNullOrWhiteSpace($IMAGE_NAME)) {
     exit 1
 }
 
-# Prompt for version
-$inputVersion = Read-Host "Image version [$IMAGE_VERSION]"
-if (-not [string]::IsNullOrWhiteSpace($inputVersion)) {
-    $IMAGE_VERSION = $inputVersion
+if ($PSBoundParameters.ContainsKey('ImageVersion')) {
+    $IMAGE_VERSION = $ImageVersion
+} else {
+    $inputVersion = Read-Host "Image version [$IMAGE_VERSION]"
+    if (-not [string]::IsNullOrWhiteSpace($inputVersion)) {
+        $IMAGE_VERSION = $inputVersion
+    }
 }
 
 if ([string]::IsNullOrWhiteSpace($IMAGE_VERSION)) {
