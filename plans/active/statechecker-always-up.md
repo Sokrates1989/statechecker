@@ -1,8 +1,9 @@
 # Statechecker Always-Up Plan
 
-Updated: 2026-09-26
+Updated: 2026-09-27
 
-Status: active; IONOS recovered but alert credentials failed; reverse drill on hold
+Status: active; Ubuntu Mini credential repaired; IONOS drill retest pending;
+reverse drill on hold
 
 ## Outcome and scope
 
@@ -53,18 +54,26 @@ next production-affecting batch.
   `getMe` returned HTTP 404 `Not Found` for both raw values. Ubuntu Mini's
   48-character value has literal enclosing quotes. Removing that pair in a
   read-only probe produced a valid token: Telegram `getMe` and `getChat` for its
-  configured error chat both returned HTTP 200. The running CHECK container
-  still receives the quoted secret. IONOS's value is four characters, has no
-  enclosing quotes, and is not a valid token shape. Its normalized Bot API
+  configured error chat both returned HTTP 200. At diagnosis, the running CHECK
+  container still received the quoted secret. IONOS's value is four characters,
+  has no enclosing quotes, and is not a valid token shape. Its normalized Bot API
   probes were skipped. The filtered Ubuntu Mini checker logs showed no matching
   event in the drill window, so credential repair alone will not prove that the
   worker detected the outage.
+- On 2026-09-27, the operator rotated only Ubuntu Mini's CHECK service through
+  a temporary valid secret, detached the malformed original, recreated the
+  original external secret name with the unquoted token, and switched CHECK
+  back. The token and error chat passed Telegram `getMe` and `getChat` before
+  rotation. Each CHECK update converged at 1/1 and the final running worker
+  read a token with valid shape. The final `./quick-start.sh --health` passed:
+  API, CHECK, database, and Web were 1/1 and public API/Web endpoints were
+  reachable. Alert delivery still requires a new controlled IONOS outage test.
 - The 3.0.2 Web image includes guidance for removing starter examples, but the
   operator has not yet accepted that UI behavior.
 
 ## Milestones
 
-### 1. Confirm mutual monitoring — health and peer UI passed; alert route failed
+### 1. Confirm mutual monitoring — health and peer UI passed; alert route retest pending
 
 On both Websites tabs, confirm that exactly one peer API sentinel remains and
 is **Up** after at least one five-minute worker cycle. Confirm the intended
@@ -75,7 +84,7 @@ the initial rollout.
 Acceptance: both peers remain visible and **Up**, and the checker services
 remain at 1/1. This is the preflight for the outage drill.
 
-### 2. Controlled failure and recovery drill — IONOS alert failure; reverse direction on hold
+### 2. Controlled failure and recovery drill — IONOS retest pending; reverse direction on hold
 
 Test IONOS API first, with Ubuntu Mini observing. After the operator reviews
 that result, reverse the direction. For each direction, preflight the healthy
@@ -146,10 +155,10 @@ checks.
 - The operator approved the drill batch, with IONOS as the first target and a
   manual review before reversing direction. The operator's Websites screenshots
   now show the two peer entries **Up**, but no Telegram message arrived during
-  the IONOS outage or recovery. Repair Ubuntu Mini's quoted checker secret and
-  retest the first alert route. Replace IONOS's invalid checker secret before
-  the reverse drill. Verify Telegram authentication and chat access on each
-  running worker without exposing either token.
+  the IONOS outage or recovery. Ubuntu Mini's quoted checker secret has been
+  repaired; retest the first alert route. Replace IONOS's invalid checker
+  secret before the reverse drill. Verify Telegram authentication and chat
+  access on each running worker without exposing either token.
 - Local source implementation of the Telegram acknowledgement and
   redeploy-pinning changes is ready as separately reviewable batches while
   the operator runs the drill. Their production rollout is not authorized by
