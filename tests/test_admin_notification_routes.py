@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
+import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -13,7 +16,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src" / "utils"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src" / "utils"))
 
 import adminApiNotificationRoutes as notifications
 
@@ -39,6 +43,37 @@ class AdminNotificationTests(unittest.TestCase):
         self.assertEqual(settings["error_chat_ids"], ["-123", "456"])
         self.assertEqual(settings["info_chat_ids"], ["789"])
         self.assertNotIn("token", str(settings).lower())
+
+    def test_api_entrypoint_exposes_authenticated_notification_routes(self) -> None:
+        """The deployed FastAPI app serves both notification endpoints."""
+        spec = importlib.util.spec_from_file_location(
+            "statechecker_notification_route_contract", ROOT / "main_api_startpoint.py"
+        )
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        app_module = importlib.util.module_from_spec(spec)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            environment = {
+                "STATECHECKER_CONFIG_FILE": str(Path(temporary_directory) / "missing.json"),
+                "STATECHECKER_SERVER_CONFIG": "{}",
+            }
+            with (
+                patch.dict(os.environ, environment),
+                patch("startup.initialize"),
+                patch("logger.Logger"),
+            ):
+                spec.loader.exec_module(app_module)
+
+        client = TestClient(app_module.app)
+        settings = client.get("/v1/admin/notifications")
+        send = client.post(
+            "/v1/admin/notifications/test",
+            json={"level": "error", "message": "Test"},
+        )
+
+        self.assertEqual(settings.status_code, 401)
+        self.assertEqual(send.status_code, 401)
 
     def test_test_send_requires_authentication(self) -> None:
         """An anonymous request never reaches Telegram delivery."""

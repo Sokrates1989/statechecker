@@ -40,6 +40,7 @@ configUtils = ConfigUtils.ConfigUtils()
 import adminApiBackupsRoutes as AdminApiBackupsRoutes
 import adminApiConfigRoutes as AdminApiConfigRoutes
 import adminApiGoogleDriveRoutes as AdminApiGoogleDriveRoutes
+import adminApiNotificationRoutes as AdminApiNotificationRoutes
 import adminApiToolsRoutes as AdminApiToolsRoutes
 import adminApiWebsitesRoutes as AdminApiWebsitesRoutes
 import debug_logging as DebugLogging
@@ -101,6 +102,7 @@ app.include_router(AdminApiToolsRoutes.router)
 app.include_router(AdminApiWebsitesRoutes.router)
 app.include_router(AdminApiGoogleDriveRoutes.router)
 app.include_router(AdminApiBackupsRoutes.router)
+app.include_router(AdminApiNotificationRoutes.router)
 
 @app.get("/")
 async def root_get():
