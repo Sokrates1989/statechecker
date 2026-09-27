@@ -22,6 +22,11 @@ and info chat IDs and sends a test message to either group. Sending requires
 `statechecker:admin`; reading the settings requires `statechecker:read` or
 `statechecker:admin`. The bot token remains a server-side secret. The API needs
 the same Telegram secret and recipient environment settings as the checker.
+The test result remains visible in the tab and identifies each chat's delivery
+outcome, a safe failure reason, Telegram HTTP status when available, and a
+diagnostic ID for the API service logs. It never displays the bot token or raw
+provider exception text. A successful test verifies direct bot delivery only;
+the periodic checker alert path still needs its own outage drill.
 
 <br>
 

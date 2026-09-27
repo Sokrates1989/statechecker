@@ -151,10 +151,19 @@ async function apiCall(endpoint, method = 'GET', body = null) {
         // Handle 403 Forbidden - user lacks required role
         if (response.status === 403) {
             const errorMsg = 'Access denied. You need admin privileges to perform this action.';
-            throw new Error(errorMsg);
+            const error = new Error(errorMsg);
+            error.httpStatus = response.status;
+            throw error;
         }
         
-        throw new Error(`${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
+        const error = new Error(`${response.status} ${response.statusText}${text ? ` - ${text}` : ''}`);
+        error.httpStatus = response.status;
+        try {
+            error.apiDetails = JSON.parse(text).detail;
+        } catch (_) {
+            // Non-JSON errors keep their existing message-only behavior.
+        }
+        throw error;
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -309,7 +318,8 @@ function clearLoginError() {
  */
 async function loadTabContent(tabName) {
     try {
-        const response = await fetch(`./${tabName}/${tabName}.html`);
+        const cacheVersion = tabName === 'notifications' ? '?v=telegram-diagnostics-1' : '';
+        const response = await fetch(`./${tabName}/${tabName}.html${cacheVersion}`);
         if (!response.ok) {
             throw new Error(`Failed to load ${tabName} tab`);
         }
@@ -330,7 +340,7 @@ async function loadTabContent(tabName) {
 
         // Load and initialize tab-specific JavaScript
         const script = document.createElement('script');
-        script.src = `./${tabName}/${tabName}.js`;
+        script.src = `./${tabName}/${tabName}.js${cacheVersion}`;
         script.onload = () => {
             loadedScripts.add(tabName);
             initializeTab(tabName);

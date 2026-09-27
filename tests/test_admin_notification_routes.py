@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import requests
+import telebot
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -60,7 +62,9 @@ class AdminNotificationTests(unittest.TestCase):
                 _=None,
             )
 
-        self.assertEqual(result, {"delivered": 2, "failed": 0})
+        self.assertEqual((result["attempted"], result["delivered"], result["failed"]), (2, 2, 0))
+        self.assertEqual([item["status"] for item in result["results"]], ["sent", "sent"])
+        self.assertEqual(len(result["diagnostic_id"]), 12)
         self.assertEqual(bot.send_message.call_count, 2)
         bot.send_message.assert_any_call("-123", "Test &lt;b&gt;alert&lt;/b&gt;")
 
@@ -75,17 +79,54 @@ class AdminNotificationTests(unittest.TestCase):
                 )
 
         self.assertEqual(caught.exception.status_code, 503)
-        self.assertEqual(caught.exception.detail, "telegram_token_invalid")
+        self.assertEqual(caught.exception.detail, "telegram_token_quoted")
         bot_factory.assert_not_called()
 
-    def test_partial_delivery_reports_counts_without_provider_details(self) -> None:
-        """A failed recipient yields a safe summary and retries remain possible."""
+    def test_missing_and_placeholder_tokens_have_distinct_diagnostics(self) -> None:
+        """An empty secret and a placeholder identify different setup faults."""
+        for token, expected in [("", "telegram_token_missing"), ("null", "telegram_token_invalid")]:
+            self.config.getTelegramBotToken.return_value = token
+            with self.subTest(token=token), patch.object(notifications.telebot, "TeleBot") as bot_factory:
+                with self.assertRaises(HTTPException) as caught:
+                    notifications.send_test_notification(
+                        notifications.TelegramTestRequest(level="info", message="Test"), _=None,
+                    )
+                self.assertEqual(caught.exception.detail, expected)
+                bot_factory.assert_not_called()
+
+    def test_partial_delivery_identifies_recipient_without_provider_details(self) -> None:
+        """A failed recipient reports a safe reason and retains other successes."""
         bot = Mock()
-        bot.send_message.side_effect = [None, RuntimeError("provider details")]
+        bot.send_message.side_effect = [None, requests.exceptions.Timeout("secret URL")]
         with patch.object(notifications.telebot, "TeleBot", return_value=bot):
             result = notifications.send_test_notification(
                 notifications.TelegramTestRequest(level="error", message="Test"),
                 _=None,
             )
 
-        self.assertEqual(result, {"delivered": 1, "failed": 1})
+        self.assertEqual((result["delivered"], result["failed"]), (1, 1))
+        self.assertEqual(result["results"][1]["chat_id"], "456")
+        self.assertEqual(result["results"][1]["reason"], "network_timeout")
+        self.assertNotIn("secret URL", str(result))
+
+    def test_total_provider_failure_returns_safe_details_and_correlation_id(self) -> None:
+        """Telegram rejection includes actionable metadata without raw API text."""
+        self.config.getTelegramErrorChatsIDs.return_value = ["-123"]
+        bot = Mock()
+        bot.send_message.side_effect = telebot.apihelper.ApiTelegramException(
+            "sendMessage", {"error_code": 400, "description": "Bad Request: chat not found"},
+            {"ok": False, "error_code": 400, "description": "Bad Request: chat not found"},
+        )
+        with patch.object(notifications.telebot, "TeleBot", return_value=bot):
+            with self.assertRaises(HTTPException) as caught:
+                notifications.send_test_notification(
+                    notifications.TelegramTestRequest(level="error", message="Test"), _=None,
+                )
+
+        detail = caught.exception.detail
+        self.assertEqual(caught.exception.status_code, 502)
+        self.assertEqual(detail["code"], "telegram_delivery_failed")
+        self.assertEqual(detail["results"][0]["reason"], "chat_not_found")
+        self.assertEqual(detail["results"][0]["provider_status"], 400)
+        self.assertEqual(len(detail["diagnostic_id"]), 12)
+        self.assertNotIn("Bad Request", str(detail))

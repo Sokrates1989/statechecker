@@ -497,6 +497,17 @@ span.status {
     display: none !important;
 }
 
+.notification-test-result {
+    margin-top: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.notification-test-result ul {
+    margin: 0.5rem 0 0 1.25rem;
+}
+
 /* Loading State */
 .loading {
     text-align: center;

@@ -6,7 +6,9 @@ import html
 import logging
 import re
 from typing import Literal
+from uuid import uuid4
 
+import requests
 import telebot
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -38,6 +40,32 @@ def _recipient_ids(level: str) -> list[str]:
     return list(dict.fromkeys(str(chat_id) for chat_id in (configured or [])))
 
 
+def _delivery_failure(exc: Exception) -> tuple[str, int | None]:
+    """Classify a failed send without returning provider text or credentials."""
+    if isinstance(exc, telebot.apihelper.ApiTelegramException):
+        status = getattr(exc, "error_code", None)
+        status = status if isinstance(status, int) else None
+        description = str(getattr(exc, "description", "")).lower()
+        if "chat not found" in description:
+            return "chat_not_found", status
+        if "bot was blocked" in description or "user is deactivated" in description:
+            return "bot_blocked", status
+        if status == 403 or "bot was kicked" in description or "not enough rights" in description:
+            return "chat_forbidden", status
+        if status in (401, 404):
+            return "token_rejected", status
+        if status == 429:
+            return "rate_limited", status
+        if status is not None and status >= 500:
+            return "provider_unavailable", status
+        return "provider_rejected", status
+    if isinstance(exc, requests.exceptions.Timeout):
+        return "network_timeout", None
+    if isinstance(exc, requests.exceptions.RequestException):
+        return "network_error", None
+    return "unexpected_error", None
+
+
 @router.get("")
 def get_notification_settings(_=Depends(require_read_access)) -> dict:
     """Show Telegram delivery settings without exposing the bot token."""
@@ -64,21 +92,50 @@ def send_test_notification(
         token = configUtils.getTelegramBotToken()
     except (AttributeError, OSError, TypeError):
         token = None
-    if not isinstance(token, str) or not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token):
+    if not isinstance(token, str) or not token.strip():
+        raise HTTPException(status_code=503, detail="telegram_token_missing")
+    if len(token) >= 3 and token[0] in "\"'" and token[-1] == token[0] and re.fullmatch(
+        r"[0-9]+:[A-Za-z0-9_-]+", token[1:-1]
+    ):
+        raise HTTPException(status_code=503, detail="telegram_token_quoted")
+    if not re.fullmatch(r"[0-9]+:[A-Za-z0-9_-]+", token):
         raise HTTPException(status_code=503, detail="telegram_token_invalid")
 
     try:
         bot = telebot.TeleBot(token, parse_mode="HTML")
     except (TypeError, ValueError):
         raise HTTPException(status_code=503, detail="telegram_token_invalid") from None
-    delivered = 0
+    diagnostic_id = uuid4().hex[:12]
+    results = []
     for chat_id in chat_ids:
         try:
             bot.send_message(chat_id, html.escape(payload.message))
-            delivered += 1
-        except Exception:
-            logger.warning("Telegram test delivery failed for a configured chat")
+            results.append({"chat_id": chat_id, "status": "sent"})
+        except Exception as exc:
+            reason, provider_status = _delivery_failure(exc)
+            results.append({
+                "chat_id": chat_id,
+                "status": "failed",
+                "reason": reason,
+                "provider_status": provider_status,
+            })
+            logger.warning(
+                "Telegram test delivery failed diagnostic_id=%s chat_id=%s reason=%s provider_status=%s",
+                diagnostic_id, chat_id, reason, provider_status,
+            )
 
+    delivered = sum(result["status"] == "sent" for result in results)
+    outcome = {
+        "diagnostic_id": diagnostic_id,
+        "attempted": len(chat_ids),
+        "delivered": delivered,
+        "failed": len(chat_ids) - delivered,
+        "results": results,
+    }
+    logger.info(
+        "Telegram test completed diagnostic_id=%s attempted=%s delivered=%s failed=%s",
+        diagnostic_id, len(chat_ids), delivered, outcome["failed"],
+    )
     if delivered == 0:
-        raise HTTPException(status_code=502, detail="telegram_delivery_failed")
-    return {"delivered": delivered, "failed": len(chat_ids) - delivered}
+        raise HTTPException(status_code=502, detail={"code": "telegram_delivery_failed", **outcome})
+    return outcome
