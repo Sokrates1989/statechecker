@@ -2,8 +2,8 @@
 
 Updated: 2026-09-27
 
-Status: active; IONOS drill retest passed; Ubuntu Mini reverse drill and final
-acceptance pending
+Status: active; both outage drills delivered DOWN and UP AGAIN; final Websites
+check and operator acceptance pending
 
 ## Outcome and scope
 
@@ -84,6 +84,15 @@ next production-affecting batch.
   URL. The observer received an HTTP `Bad Gateway` result during the outage.
   The drill command's console output was not supplied for this retest, so its
   exact scale, restore, and health-check timestamps are not recorded here.
+- In the reverse drill on 2026-09-27, the operator scaled Ubuntu Mini's API to
+  zero at 15:57:30 UTC. Its public health URL returned HTTP 404 at 15:57:36 UTC.
+  After restoration, the URL returned HTTP 200 at 16:04:47 UTC and the local
+  `./quick-start.sh --health` passed with API, CHECK, database, and Web at 1/1.
+  The supplied Telegram screenshot shows a **DOWN** message at 17:58 and an
+  **UP AGAIN** message at 18:07, both naming the Ubuntu Mini API health URL.
+  The pasted shell output ended during the six-minute recovery wait, so its
+  final `DRILL_END` line was not observed. Fresh post-rollout Websites-tab
+  confirmation remains pending.
 
 ## Milestones
 
@@ -98,7 +107,7 @@ the initial rollout.
 Acceptance: both peers remain visible and **Up**, and the checker services
 remain at 1/1. This is the preflight for the outage drill.
 
-### 2. Controlled failure and recovery drill — IONOS passed; reverse direction pending
+### 2. Controlled failure and recovery drill — both alert pairs and recovery observed
 
 Test IONOS API first, with Ubuntu Mini observing. After the operator reviews
 that result, reverse the direction. For each direction, preflight the healthy
@@ -117,7 +126,7 @@ the API first and investigate rather than extending the outage indefinitely.
 Rollback: restore the target API to one replica immediately, then verify its
 public health URL and Swarm convergence. The drill changes no persisted data.
 
-### 3. Make Telegram delivery acknowledgement reliable — deployed; one direction validated
+### 3. Make Telegram delivery acknowledgement reliable — deployed; both directions validated
 
 The earlier 3.0.2 checker stored a website's down-message-sent flag before
 calling Telegram and ignored the sender's Boolean result. Version `3.1.1` now
@@ -134,8 +143,8 @@ Affected repository: Statechecker application. Local focused tests for
 successful send, failed send, recovery, partial-recipient behavior, and
 email-only compatibility pass. The operator built and deployed version `3.1.1`
 on both hosts. Ubuntu Mini's live worker delivered the IONOS DOWN and UP AGAIN
-messages in the retest. IONOS's live worker still needs the reverse drill.
-No database schema migration was required.
+messages; IONOS's live worker delivered the reverse pair. No database schema
+migration was required.
 
 ### 4. Preserve image identity through normal redeploys — validated at 3.1.0
 
@@ -160,8 +169,8 @@ Confirm that each post-rollout Websites tab contains only its peer URL and is
 deployment, health checks, peer URL ownership, Telegram destination checks,
 image update/redeploy, emergency API restoration, and response to missing
 alerts. The draft operating procedure is in the deployment repository at
-`docs/always-up-operations.md`. Close this plan only after the reverse drill,
-fresh peer UI checks, and final operator acceptance.
+`docs/always-up-operations.md`. Close this plan after fresh peer UI checks and
+final operator acceptance.
 
 ## Decisions and authorization
 
@@ -169,7 +178,8 @@ fresh peer UI checks, and final operator acceptance.
   IONOS retest delivered the expected DOWN and UP AGAIN alert pair, and the
   operator reported that it worked perfectly. Both hosts' Telegram secrets
   have been repaired and their UI test sends succeeded. The reverse drill on
-  Ubuntu Mini is the remaining production validation.
+  Ubuntu Mini also delivered the alert pair and passed local health checks.
+  Final Websites-tab confirmation and operator acceptance remain pending.
 - The operator controls image build/publication, deployment, and final batch
   approval. The Telegram acknowledgement and redeploy-pinning changes are live
   in version `3.1.1`; their remaining checks are listed in the milestones.
