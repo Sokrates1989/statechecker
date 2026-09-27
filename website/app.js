@@ -21,6 +21,7 @@ const userName = document.getElementById('userName');
 const statusMessage = document.getElementById('status-message');
 const statusMessageBottom = document.getElementById('status-message-bottom');
 const tabContentContainer = document.getElementById('tab-content-container');
+document.getElementById('notifications-tab-button').textContent = window.statecheckerT('notifications.tab');
 
 // Track loaded scripts to avoid duplicate loading
 const loadedScripts = new Set();
@@ -365,6 +366,9 @@ function initializeTab(tabName) {
         case 'gdrive':
             if (typeof initGdriveTab === 'function') initGdriveTab();
             break;
+        case 'notifications':
+            if (typeof initNotificationsTab === 'function') initNotificationsTab();
+            break;
     }
 
     loadTabData(tabName);
@@ -390,6 +394,9 @@ async function loadTabData(tabName) {
                 break;
             case 'gdrive':
                 if (typeof loadGdriveFolders === 'function') await loadGdriveFolders();
+                break;
+            case 'notifications':
+                if (typeof loadNotifications === 'function') await loadNotifications();
                 break;
         }
     } catch (error) {

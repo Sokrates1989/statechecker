@@ -22,6 +22,7 @@ from fastapi import APIRouter
 import adminApiBackupsRoutes as AdminApiBackupsRoutes
 import adminApiConfigRoutes as AdminApiConfigRoutes
 import adminApiGoogleDriveRoutes as AdminApiGoogleDriveRoutes
+import adminApiNotificationRoutes as AdminApiNotificationRoutes
 import adminApiToolsRoutes as AdminApiToolsRoutes
 import adminApiWebsitesRoutes as AdminApiWebsitesRoutes
 
@@ -32,3 +33,4 @@ router.include_router(AdminApiToolsRoutes.router)
 router.include_router(AdminApiWebsitesRoutes.router)
 router.include_router(AdminApiGoogleDriveRoutes.router)
 router.include_router(AdminApiBackupsRoutes.router)
+router.include_router(AdminApiNotificationRoutes.router)

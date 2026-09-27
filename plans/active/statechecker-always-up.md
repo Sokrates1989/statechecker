@@ -168,6 +168,12 @@ checks.
   acknowledgement without a per-recipient schema. Partial success in a
   future multi-recipient configuration is acknowledged and logged; retrying
   only failed recipients would require a durable per-recipient delivery record.
+- The operator requested a Telegram test send in the UI before repeating the
+  outage drill. Local source now includes a Notifications tab and an admin-only
+  test endpoint; the Swarm API template mounts the existing Telegram secret and
+  passes the worker's configured recipients. These changes still need image
+  rollout and an actual UI test on both hosts. Recipient editing in Statechecker
+  remains deployment-managed because API and checker use separate config mounts.
 
 ## Deferred, not required for two-server acceptance
 

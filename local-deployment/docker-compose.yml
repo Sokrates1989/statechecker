@@ -40,6 +40,11 @@ services:
       DB_WAIT_TIMEOUT: ${DB_WAIT_TIMEOUT:-60}
       # Config
       STATECHECKER_SERVER_CONFIG: ${STATECHECKER_SERVER_CONFIG:-}
+      # Telegram test notifications use the same development settings as check.
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_SENDER_BOT_TOKEN: ${TELEGRAM_SENDER_BOT_TOKEN:-}
+      TELEGRAM_RECIPIENTS_ERROR_CHAT_IDS: ${TELEGRAM_RECIPIENTS_ERROR_CHAT_IDS:-}
+      TELEGRAM_RECIPIENTS_INFO_CHAT_IDS: ${TELEGRAM_RECIPIENTS_INFO_CHAT_IDS:-}
     volumes:
       - ../src:/code/src:ro
       - ../main_api_startpoint.py:/code/main_api_startpoint.py:ro

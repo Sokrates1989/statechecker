@@ -17,6 +17,12 @@ stores one flag per monitored item. Email error messages are sent after that
 acknowledgement, avoiding repeated email during Telegram outages. With
 Telegram disabled, the existing email-only behavior remains.
 
+The Web UI's **Notifications** tab shows the server-configured Telegram error
+and info chat IDs and sends a test message to either group. Sending requires
+`statechecker:admin`; reading the settings requires `statechecker:read` or
+`statechecker:admin`. The bot token remains a server-side secret. The API needs
+the same Telegram secret and recipient environment settings as the checker.
+
 <br>
 
 ## Table of Contents
